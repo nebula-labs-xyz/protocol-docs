@@ -1,5 +1,116 @@
 # Treasury
-[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/921edb5eadadd55e1a3bfce4389f11db33e9cb1a/contracts/ecosystem/Treasury.sol)
+[Git Source](https://github.com/nebula-labs-xyz/lendefi-dao/blob/07f5cb7369219dbffd648091ffbddb6d70a0157c/contracts/ecosystem/Treasury.sol)
+
+## Overview
+
+The Treasury contract serves as the financial backbone of the Lendefi DAO, managing token vesting over a 36-month period with a linear release schedule. It offers a secure, upgradeable system for controlled fund distribution with role-based access controls and comprehensive security measures.
+
+## Architecture Analysis
+
+### Design Philosophy
+
+The contract demonstrates a thoughtful "separation of concerns" architecture with:
+- **Access-controlled operations**: Different roles for different functionalities
+- **Linear vesting mechanism**: Predictable, time-based token release
+- **Secure upgradeability**: UUPS pattern with version tracking
+- **Emergency controls**: Pausability for risk mitigation
+
+### Key Components
+
+1. **Vesting Engine**
+   - Linear schedule over 3 years (1095 days)
+   - Retroactive start (180 days before initialization)
+   - Support for both ETH and ERC20 tokens
+   - Time-proportional calculation formula
+
+2. **Role Management**
+   - MANAGER_ROLE: Controls fund releases (assigned to timelock)
+   - PAUSER_ROLE: Emergency controls
+   - UPGRADER_ROLE: Contract upgrade authorization
+   - DEFAULT_ADMIN_ROLE: Role management (assigned to guardian)
+
+3. **Fund Management**
+   - Separate tracking for ETH and each ERC20 token
+   - Granular release amounts (vs. releasing all vested funds)
+   - Proper accounting of historical releases
+
+## Technical Assessment
+
+### Strengths
+
+1. **Security Measures**
+   - ReentrancyGuard on ETH transfers
+   - SafeERC20 for token operations
+   - Address.sendValue for safe ETH transfers
+   - Input validation with custom errors
+   - State updates before external calls
+   - Pause functionality for emergency response
+
+2. **Upgradeability Pattern**
+   - Well-implemented UUPS pattern
+   - Version tracking with increment on upgrades
+   - Storage gap for future extensions
+   - Event emission for upgrade transparency
+
+3. **Gas Efficiency**
+   - Optimal storage usage
+   - Efficient vesting calculation
+   - SafeCast for type conversions
+   - Specific amount releases vs. releasing all vested funds
+
+4. **Governance Integration**
+   - Timelock assignment for fund management
+   - Guardian role for administrative oversight
+   - Clear separation between immediate and governed actions
+
+### Potential Concerns
+
+1. **Retroactive Start Time**
+   - Setting start time to 180 days before deployment means ~5% is immediately vested
+   - This creates an unusual vesting pattern with immediate availability
+   - May cause confusion about actual vesting duration
+
+2. **Limited Recovery Mechanisms**
+   - No functionality to recover accidentally sent tokens
+   - No way to handle token rebasing or fee-on-transfer tokens
+   - No mechanism to adjust parameters post-initialization
+
+3. **Release Validation**
+   - Release functions don't verify that token contracts exist
+   - No batch release functionality for gas optimization
+   - No specific handling for tokens with transfer restrictions
+
+4. **Technical Oddities**
+   - Typo in function documentation ("timnestamp")
+   - Unnecessary "virtual" keyword on some view functions
+   - Security contact email has typo ("xysz" instead of "xyz")
+
+## Implementation Details
+
+### Vesting Calculation
+
+The contract implements a standard linear vesting formula:
+```
+vestedAmount = totalAllocation * (currentTime - startTime) / duration
+```
+
+With boundary conditions:
+- Before start: 0% vested
+- After duration: 100% vested
+- During vesting: Linear proportion based on elapsed time
+
+### Release Mechanism
+
+The release functions implement a "partial withdrawal" pattern that:
+1. Validates recipient address is not zero
+2. Verifies requested amount doesn't exceed vested amount
+3. Updates release accounting before transfer
+4. Emits event with details
+5. Transfers funds to recipient
+
+This approach offers flexibility in fund management but requires more explicit tracking.
+
+
 
 **Inherits:**
 [ITREASURY](/contracts/interfaces/ITreasury.sol/interface.ITREASURY.md), Initializable, PausableUpgradeable, AccessControlUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable

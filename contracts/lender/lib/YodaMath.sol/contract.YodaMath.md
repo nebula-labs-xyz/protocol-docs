@@ -1,16 +1,120 @@
 # YodaMath
 [Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/921edb5eadadd55e1a3bfce4389f11db33e9cb1a/contracts/lender/lib/YodaMath.sol)
 
+# Security Review: YodaMath Contract
+
+## 1. Overview
+
+The YodaMath contract implements fixed-point mathematical operations for financial calculations, focusing on compound interest and rate conversions. It's designed as a utility library for the Lendefi protocol to handle precise financial computations that aren't natively supported in Solidity.
+
+## 2. Contract Architecture
+
+The contract uses two precision levels:
+- **WAD**: 10^6 (1e6) - 6 decimal places of precision
+- **RAY**: 10^27 (1e27) - 27 decimal places of precision for higher accuracy
+
+Core functionality includes:
+1. Basic fixed-point arithmetic operations (`rmul`, `rdiv`)
+2. Exponentiation with high precision (`rpow`)
+3. Interest calculation utilities
+4. Rate conversion functions
+
+## 3. Detailed Analysis
+
+### 3.1. Core Mathematics Implementation
+
+**Fixed-Point Multiplication (`rmul`)**
+```solidity
+function rmul(uint256 x, uint256 y) public pure returns (uint256 z) {
+    z = ((x * y) + RAY / 2) / RAY;
+}
+```
+- Uses RAY precision (10^27)
+- Includes rounding with `+ RAY / 2` to minimize precision loss
+- Correctly handles multiplication overflow with Solidity 0.8.x built-in checks
+
+**Fixed-Point Division (`rdiv`)**
+```solidity
+function rdiv(uint256 x, uint256 y) public pure returns (uint256 z) {
+    z = ((x * RAY) + y / 2) / y;
+}
+```
+- Properly scales numerator by RAY before division
+- Includes rounding with `+ y / 2` to minimize precision loss
+- No explicit zero divisor check (relies on Solidity 0.8.x revert)
+
+**Binary Exponentiation (`rpow`)**
+```solidity
+function rpow(uint256 x, uint256 n) public pure returns (uint256 z) {
+    z = RAY;
+    if (n == 0) { return z; }
+    if (n == 1) { return x; }
+    
+    while (n > 0) {
+        if (n & 1 == 1) { z = rmul(z, x); }
+        x = rmul(x, x);
+        n = n >> 1;
+    }
+}
+```
+- Implements the efficient square-and-multiply algorithm (O(log n) complexity)
+- Properly handles base cases (n=0, n=1)
+- Algorithm is mathematically sound and gas-efficient
+
+### 3.2. Financial Utilities
+
+**Annual Rate Conversion**
+```solidity
+function annualRateToRay(uint256 rate) public pure returns (uint256 r) {
+    r = RAY + rdiv((rate * RAY) / WAD, SECONDS_PER_YEAR_RAY);
+}
+```
+- Correctly converts annual percentage rate to per-second rate in RAY precision
+- Handles the precision difference between WAD and RAY
+
+**Interest Accrual**
+```solidity
+function accrueInterest(uint256 principal, uint256 rateRay, uint256 time) public pure returns (uint256) {
+    return rmul(principal, rpow(rateRay, time));
+}
+```
+- Implements compound interest formula: principal * (rate ^ time)
+- Uses binary exponentiation for efficient calculation
+
+**Breakeven Rate Calculation**
+```solidity
+function breakEvenRate(uint256 loan, uint256 supplyInterest) public pure returns (uint256) {
+    return ((WAD * (loan + supplyInterest)) / loan) - WAD;
+}
+```
+- Calculates minimum borrow rate needed for protocol profitability
+- Result is in WAD precision (not RAY)
+
+## 4. Strengths
+
+1. **Mathematical Precision**: Uses high precision (RAY = 10^27) to minimize rounding errors in financial calculations.
+
+2. **Algorithmic Efficiency**: The binary exponentiation algorithm is implemented correctly and efficiently.
+
+3. **Clear Documentation**: Functions have descriptive NatSpec comments explaining their purpose and parameters.
+
+4. **Rounding Approach**: Consistent use of rounding (`+ divisor / 2`) in division operations to minimize precision loss.
+
+5. **Gas Efficiency**: The binary exponentiation algorithm is optimized for gas consumption compared to naive approaches.
+
+
+
+
 **Inherits:**
 [IYODAMATH](/contracts/interfaces/IYodaMath.sol/interface.IYODAMATH.md)
 
 **Author:**
-Nebula Labs Inc
+Nebula Holding Inc
 
 Compunding and beyond
 
 **Note:**
-security-contact: security@nebula-labs.xysz
+security-contact: security@nebula-labs.xyz
 
 
 ## State Variables
