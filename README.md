@@ -106,13 +106,15 @@ The contract demonstrates the technical maturity expected in a production-grade 
 ## Features
 
 1. Supports more than 200 collateral assets.
-2. Up to 20 collateral assets per user at a time.
-3. Compounds interest.
-4. Gas Efficient.
-5. Issues ERC20 yield token to lenders.
-6. Completely upgradeable.
-7. DAO Managed.
-8. Reward Ecosystem.
+2. Allows multiple independent user positions.
+3. Up to 20 collateral assets per user postion.
+4. Compounds interest.
+5. Gas Efficient.
+6. Issues ERC20 yield token to lenders.
+7. Completely upgradeable.
+8. DAO Managed.
+9. Reward Ecosystem.
+10. Flash loan functionality.
 
 ## Technical Architecture
 
@@ -205,7 +207,7 @@ then
 
 ```
 git clone https://github.com/nebula-labs-xyz/lendefi-protocol.git
-cd lendefi-dao
+cd lendefi-protocol
 
 npm install
 forge clean && forge build && forge test -vvv --ffi --gas-report
