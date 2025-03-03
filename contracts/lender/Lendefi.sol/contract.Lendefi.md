@@ -401,14 +401,23 @@ mapping(address => mapping(uint256 => mapping(address => uint256))) internal pos
 ```
 
 
-### positionAssets
+### positionCollateralAssets
 List of assets used as collateral in each position
 
 *Maps user address and position ID to array of collateral asset addresses*
 
 
 ```solidity
-mapping(address => mapping(uint256 => address[])) internal positionAssets;
+mapping(address => mapping(uint256 => address[])) internal positionCollateralAssets;
+```
+
+
+### pcaPos
+*borrower address position mapping used to remove positonCollateralAssets when needed*
+
+
+```solidity
+mapping(address src => mapping(uint256 => mapping(address => uint256 pos))) internal pcaPos;
 ```
 
 
@@ -494,6 +503,46 @@ modifier validPosition(address user, uint256 positionId);
 |----|----|-----------|
 |`user`|`address`|The address of the user who owns the position|
 |`positionId`|`uint256`|The ID of the position to validate|
+
+
+### activePosition
+
+Validates that the given position is in ACTIVE status
+
+*Reverts with InactivePosition error if the position status is not ACTIVE*
+
+**Notes:**
+- security: This ensures operations are only performed on active positions
+
+- error: InactivePosition if position has been CLOSED or LIQUIDATED
+
+
+```solidity
+modifier activePosition(address user, uint256 positionId);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`user`|`address`|The address of the position owner|
+|`positionId`|`uint256`|The ID of the position to validate|
+
+
+### validAsset
+
+Validates that the asset is listed in the protocol
+
+*Reverts with AssetNotListed error if the asset is not in the listedAsset set*
+
+
+```solidity
+modifier validAsset(address asset);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`asset`|`address`|The address of the asset to validate|
 
 
 ### constructor
@@ -731,7 +780,8 @@ Allows users to supply collateral assets to a borrowing position
 ```solidity
 function supplyCollateral(address asset, uint256 amount, uint256 positionId)
     external
-    validPosition(msg.sender, positionId)
+    activePosition(msg.sender, positionId)
+    validAsset(asset)
     nonReentrant
     whenNotPaused;
 ```
@@ -749,32 +799,21 @@ function supplyCollateral(address asset, uint256 amount, uint256 positionId)
 Allows users to withdraw collateral assets from their borrowing position
 
 *Process:
-1. Validates isolation mode constraints
-2. Checks sufficient collateral balance
-3. Updates collateral state
-4. Verifies remaining collateral supports existing debt
-5. Removes asset from position if fully withdrawn*
+1. Validates position is active
+2. Validates isolation mode constraints
+3. Checks sufficient collateral balance
+4. Updates collateral state
+5. Verifies remaining collateral supports existing debt
+6. Removes asset from position if fully withdrawn*
 
-**Notes:**
-- security: Non-reentrant and pausable to prevent attack vectors
-
-- validation: Checks:
-- Position exists (via validPosition modifier)
-- Isolation mode constraints
-- Sufficient collateral balance
-- Withdrawal doesn't exceed credit limit
-
-- events: Emits:
-- TVLUpdated with new total value locked
-- WithdrawCollateral with withdrawal details
-
-- access: Public function, but requires valid position ownership
+**Note:**
+security: Non-reentrant and pausable to prevent attack vectors
 
 
 ```solidity
 function withdrawCollateral(address asset, uint256 amount, uint256 positionId)
     external
-    validPosition(msg.sender, positionId)
+    activePosition(msg.sender, positionId)
     nonReentrant
     whenNotPaused;
 ```
@@ -807,7 +846,7 @@ Creates a new borrowing position for the caller
 
 
 ```solidity
-function createPosition(address asset, bool isIsolated) external nonReentrant whenNotPaused;
+function createPosition(address asset, bool isIsolated) external validAsset(asset) nonReentrant whenNotPaused;
 ```
 **Parameters**
 
@@ -849,7 +888,7 @@ Allows users to borrow USDC against their collateral position
 ```solidity
 function borrow(uint256 positionId, uint256 amount)
     external
-    validPosition(msg.sender, positionId)
+    activePosition(msg.sender, positionId)
     nonReentrant
     whenNotPaused;
 ```
@@ -893,7 +932,7 @@ Allows users to repay debt on their borrowing position
 ```solidity
 function repay(uint256 positionId, uint256 amount)
     external
-    validPosition(msg.sender, positionId)
+    activePosition(msg.sender, positionId)
     nonReentrant
     whenNotPaused;
 ```
@@ -936,7 +975,7 @@ Closes a borrowing position by repaying all debt and withdrawing collateral
 
 
 ```solidity
-function exitPosition(uint256 positionId) external validPosition(msg.sender, positionId) nonReentrant whenNotPaused;
+function exitPosition(uint256 positionId) external activePosition(msg.sender, positionId) nonReentrant whenNotPaused;
 ```
 **Parameters**
 
@@ -984,7 +1023,7 @@ Liquidates an undercollateralized borrowing position
 ```solidity
 function liquidate(address user, uint256 positionId)
     external
-    validPosition(user, positionId)
+    activePosition(user, positionId)
     nonReentrant
     whenNotPaused;
 ```
@@ -1204,7 +1243,7 @@ Updates the risk tier classification for a listed asset
 
 
 ```solidity
-function updateAssetTier(address asset, CollateralTier newTier) external onlyRole(MANAGER_ROLE);
+function updateAssetTier(address asset, CollateralTier newTier) external validAsset(asset) onlyRole(MANAGER_ROLE);
 ```
 **Parameters**
 
@@ -1606,6 +1645,47 @@ function calculateCreditLimit(address user, uint256 positionId)
 |`<none>`|`uint256`|uint256 The maximum allowed borrowing amount in USDC|
 
 
+### calculateCollateralValue
+
+Calculates the total USD value of all collateral assets in a position
+
+*Calculates raw collateral value without applying any risk parameters*
+
+**Notes:**
+- security: Validates position exists via validPosition modifier
+
+- calculations: 
+- For isolated positions: returns single asset's USD value
+- For cross-collateral: sums all assets' USD values
+- Formula: amount * price * WAD / 10^assetDecimals / 10^oracleDecimals
+
+- oracle: Uses Chainlink price feeds for asset valuations
+
+- difference: Unlike calculateCreditLimit, this returns raw value without applying
+borrowThreshold or liquidationThreshold risk adjustments
+
+
+```solidity
+function calculateCollateralValue(address user, uint256 positionId)
+    public
+    view
+    validPosition(user, positionId)
+    returns (uint256);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`user`|`address`|The address of the position owner|
+|`positionId`|`uint256`|The ID of the position to value|
+
+**Returns**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`<none>`|`uint256`|uint256 The total USD value of all collateral assets (scaled by WAD)|
+
+
 ### isLiquidatable
 
 Determines if a position can be liquidated based on debt and collateral value
@@ -1623,7 +1703,7 @@ Determines if a position can be liquidated based on debt and collateral value
 
 
 ```solidity
-function isLiquidatable(address user, uint256 positionId) public view validPosition(user, positionId) returns (bool);
+function isLiquidatable(address user, uint256 positionId) public view activePosition(user, positionId) returns (bool);
 ```
 **Parameters**
 
@@ -1643,14 +1723,20 @@ function isLiquidatable(address user, uint256 positionId) public view validPosit
 
 Provides a comprehensive overview of a position's current state
 
-*Aggregates key position metrics into a single view*
+*Aggregates key position metrics into a single view for frontend display and risk assessment*
 
 **Notes:**
-- validation: Checks position exists via validPosition modifier
+- security: Validates position exists via validPosition modifier
 
 - calculations: Uses:
-- calculateCreditLimit() for collateral value
-- calculateDebtWithInterest() for current debt
+- calculateCollateralValue() for total collateral valuation in USD
+- calculateDebtWithInterest() for current debt with accrued interest
+- calculateCreditLimit() for maximum borrowing capacity
+
+- position-status: Returns one of the following status values:
+- ACTIVE (1): Position is operational and can be modified
+- LIQUIDATED (0): Position has been liquidated due to insufficient collateral
+- CLOSED (2): Position has been voluntarily closed by the user
 
 
 ```solidity
@@ -1663,7 +1749,7 @@ function getPositionSummary(address user, uint256 positionId)
         uint256 currentDebt,
         uint256 availableCredit,
         bool isIsolated,
-        address isolatedAsset
+        PositionStatus status
     );
 ```
 **Parameters**
@@ -1677,11 +1763,11 @@ function getPositionSummary(address user, uint256 positionId)
 
 |Name|Type|Description|
 |----|----|-----------|
-|`totalCollateralValue`|`uint256`|The total value of all collateral in the position|
+|`totalCollateralValue`|`uint256`|The total USD value of all collateral in the position|
 |`currentDebt`|`uint256`|The current debt including accrued interest|
 |`availableCredit`|`uint256`|The remaining borrowing capacity|
 |`isIsolated`|`bool`|Whether the position is in isolation mode|
-|`isolatedAsset`|`address`|The address of the isolated asset (if applicable)|
+|`status`|`PositionStatus`|The current status of the position (ACTIVE, LIQUIDATED, or CLOSED)|
 
 
 ### getAssetDetails
@@ -1816,7 +1902,7 @@ function healthFactor(address user, uint256 positionId) public view validPositio
 |`<none>`|`uint256`|uint256 The position's health factor (scaled by WAD)|
 
 
-### getPositionAssets
+### getPositionCollateralAssets
 
 Gets the list of collateral assets in a position
 
@@ -1827,7 +1913,7 @@ security: Validates position exists via validPosition modifier
 
 
 ```solidity
-function getPositionAssets(address user, uint256 positionId)
+function getPositionCollateralAssets(address user, uint256 positionId)
     public
     view
     validPosition(user, positionId)
@@ -2046,26 +2132,26 @@ function getTierLiquidationFee(CollateralTier tier) public view returns (uint256
 
 ### getAssetPriceOracle
 
-Gets the current price from a Chainlink oracle with additional safety checks
+Retrieves a secure price feed from Chainlink oracle with multiple safety validations
 
-*Implements multiple safety checks for price validity:
-1. Basic oracle health checks
-2. Price volatility monitoring
-3. Timestamp freshness verification*
+*Implements comprehensive safety measures to ensure price reliability:
+1. Core validations:
+- Ensures reported price is positive
+- Verifies the oracle round is complete and answered
+- Checks price data freshness (< 8 hours old)
+2. Volatility protection:
+- For price changes > 20%, requires fresher data (< 1 hour old)
+- Compares current price against previous round data
+- Prevents manipulation through large short-term price movements*
 
 **Notes:**
-- validation: Checks:
-- Price must be positive
-- Round must be complete (answeredInRound >= roundId)
-- Price must not be stale (< 8 hours old)
-- For high volatility (>20% change):
-Price must be fresh (< 1 hour old)
+- security-layer: Designed as a critical security component for accurate asset valuation
 
-- errors: Throws:
-- OracleInvalidPrice: If price <= 0
-- OracleStalePrice: If round not complete
-- OracleTimeout: If price too old
-- OracleInvalidPriceVolatility: If high volatility with stale price
+- error-cases: 
+- OracleInvalidPrice: Price must be > 0
+- OracleStalePrice: Oracle must have answered for the current round
+- OracleTimeout: Price timestamp must be recent (within 8 hours)
+- OracleInvalidPriceVolatility: High volatility prices must be fresh (within 1 hour)
 
 
 ```solidity
@@ -2075,13 +2161,13 @@ function getAssetPriceOracle(address oracle) public view returns (uint256);
 
 |Name|Type|Description|
 |----|----|-----------|
-|`oracle`|`address`|Address of the Chainlink price feed|
+|`oracle`|`address`|The address of the Chainlink price feed oracle|
 
 **Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint256`|uint256 Current price from the oracle (in oracle's decimals)|
+|`<none>`|`uint256`|Price in USD with oracle's native decimal precision|
 
 
 ### getHighestTier
@@ -2264,530 +2350,4 @@ function _update(address from, address to, uint256 value)
 ```solidity
 function _authorizeUpgrade(address newImplementation) internal override onlyRole(UPGRADER_ROLE);
 ```
-
-## Errors
-### InvalidPosition
-Thrown when a position ID is invalid for a user
-
-
-```solidity
-error InvalidPosition(address user, uint256 positionId);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The invalid position ID|
-
-### InsufficientGovTokens
-Thrown when a liquidator has insufficient governance tokens
-
-
-```solidity
-error InsufficientGovTokens(address liquidator, uint256 required, uint256 balance);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`liquidator`|`address`|The address attempting to liquidate|
-|`required`|`uint256`|The required amount of governance tokens|
-|`balance`|`uint256`|The liquidator's actual balance|
-
-### NotLiquidatable
-Thrown when attempting to liquidate a healthy position
-
-
-```solidity
-error NotLiquidatable(address user, uint256 positionId);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the position that can't be liquidated|
-
-### TransferFailed
-Thrown when a token transfer fails
-
-
-```solidity
-error TransferFailed(address token, address from, address to, uint256 amount);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`token`|`address`|The address of the token that failed to transfer|
-|`from`|`address`|The sender address|
-|`to`|`address`|The recipient address|
-|`amount`|`uint256`|The amount that failed to transfer|
-
-### InsufficientFlashLoanLiquidity
-Thrown when there's insufficient liquidity for a flash loan
-
-
-```solidity
-error InsufficientFlashLoanLiquidity(address token, uint256 requested, uint256 available);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`token`|`address`|The address of the requested token|
-|`requested`|`uint256`|The amount requested|
-|`available`|`uint256`|The actual available liquidity|
-
-### FlashLoanFailed
-Thrown when a flash loan execution fails
-
-
-```solidity
-error FlashLoanFailed();
-```
-
-### FlashLoanFundsNotReturned
-Thrown when flash loan funds aren't fully returned with fees
-
-
-```solidity
-error FlashLoanFundsNotReturned(uint256 expected, uint256 actual);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`expected`|`uint256`|The expected amount to be returned|
-|`actual`|`uint256`|The actual amount returned|
-
-### OnlyUsdcSupported
-Thrown when attempting flash loan with unsupported token
-
-
-```solidity
-error OnlyUsdcSupported(address token);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`token`|`address`|The address of the unsupported token|
-
-### FeeTooHigh
-Thrown when attempting to set a fee higher than allowed
-
-
-```solidity
-error FeeTooHigh(uint256 requested, uint256 max);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`requested`|`uint256`|The requested fee|
-|`max`|`uint256`|The maximum allowed fee|
-
-### InsufficientTokenBalance
-Thrown when a user has insufficient token balance
-
-
-```solidity
-error InsufficientTokenBalance(address token, address user, uint256 available);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`token`|`address`|The address of the token|
-|`user`|`address`|The address of the user|
-|`available`|`uint256`|The user's actual balance|
-
-### AssetNotListed
-Thrown when attempting to use an asset not listed in the protocol
-
-
-```solidity
-error AssetNotListed(address asset);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|The address of the unlisted asset|
-
-### NotIsolationEligible
-Thrown when attempting to use ineligible asset in isolation mode
-
-
-```solidity
-error NotIsolationEligible(address asset);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|The address of the asset not eligible for isolation|
-
-### InsufficientLiquidity
-Thrown when protocol has insufficient liquidity for borrowing
-
-
-```solidity
-error InsufficientLiquidity(uint256 requested, uint256 available);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`requested`|`uint256`|The requested amount|
-|`available`|`uint256`|The actual available liquidity|
-
-### IsolationDebtCapExceeded
-Thrown when attempting to exceed isolation debt cap
-
-
-```solidity
-error IsolationDebtCapExceeded(address asset, uint256 requested, uint256 cap);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|The isolated asset address|
-|`requested`|`uint256`|The requested debt amount|
-|`cap`|`uint256`|The maximum allowed debt in isolation mode|
-
-### NoIsolatedCollateral
-Thrown when no collateral is provided for isolated asset
-
-
-```solidity
-error NoIsolatedCollateral(address user, uint256 positionId, address isolatedAsset);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the position|
-|`isolatedAsset`|`address`|The address of the isolated asset|
-
-### ExceedsCreditLimit
-Thrown when attempting to borrow beyond credit limit
-
-
-```solidity
-error ExceedsCreditLimit(uint256 requested, uint256 creditLimit);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`requested`|`uint256`|The requested borrow amount|
-|`creditLimit`|`uint256`|The maximum allowed borrow amount|
-
-### NoDebtToRepay
-Thrown when attempting to repay a position with no debt
-
-
-```solidity
-error NoDebtToRepay(address user, uint256 positionId);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the position with no debt|
-
-### InvalidAssetForIsolation
-Thrown when asset doesn't match isolation mode settings
-
-
-```solidity
-error InvalidAssetForIsolation(address user, uint256 positionId, address requestedAsset, address isolatedAsset);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the position|
-|`requestedAsset`|`address`|The asset being added/withdrawn|
-|`isolatedAsset`|`address`|The current isolated asset|
-
-### InsufficientCollateralBalance
-Thrown when user has insufficient collateral in position
-
-
-```solidity
-error InsufficientCollateralBalance(
-    address user, uint256 positionId, address asset, uint256 requested, uint256 available
-);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the position|
-|`asset`|`address`|The address of the collateral asset|
-|`requested`|`uint256`|The requested withdrawal amount|
-|`available`|`uint256`|The actual available collateral|
-
-### WithdrawalExceedsCreditLimit
-Thrown when withdrawal would make position undercollateralized
-
-
-```solidity
-error WithdrawalExceedsCreditLimit(address user, uint256 positionId, uint256 debtAmount, uint256 creditLimit);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the position|
-|`debtAmount`|`uint256`|The position's current debt|
-|`creditLimit`|`uint256`|The position's new credit limit after withdrawal|
-
-### AssetDisabled
-Thrown when attempting to use a disabled asset
-
-
-```solidity
-error AssetDisabled(address asset);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|The address of the disabled asset|
-
-### IsolationModeRequired
-Thrown when attempting to use asset that requires isolation mode
-
-
-```solidity
-error IsolationModeRequired(address asset);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|The address of the asset that requires isolation|
-
-### SupplyCapExceeded
-Thrown when attempting to exceed asset supply cap
-
-
-```solidity
-error SupplyCapExceeded(address asset, uint256 requested, uint256 cap);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|The address of the asset|
-|`requested`|`uint256`|The requested supply amount|
-|`cap`|`uint256`|The maximum allowed supply|
-
-### OracleInvalidPrice
-Thrown when oracle returns invalid price data
-
-
-```solidity
-error OracleInvalidPrice(address oracle, int256 price);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`oracle`|`address`|The address of the price oracle|
-|`price`|`int256`|The invalid price value|
-
-### OracleStalePrice
-Thrown when oracle round is incomplete
-
-
-```solidity
-error OracleStalePrice(address oracle, uint80 roundId, uint80 answeredInRound);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`oracle`|`address`|The address of the price oracle|
-|`roundId`|`uint80`|The current round ID|
-|`answeredInRound`|`uint80`|The round when answer was computed|
-
-### OracleTimeout
-Thrown when oracle data is too old
-
-
-```solidity
-error OracleTimeout(address oracle, uint256 timestamp, uint256 currentTimestamp, uint256 maxAge);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`oracle`|`address`|The address of the price oracle|
-|`timestamp`|`uint256`|The timestamp of the oracle data|
-|`currentTimestamp`|`uint256`|The current block timestamp|
-|`maxAge`|`uint256`|The maximum allowed age for oracle data|
-
-### OracleInvalidPriceVolatility
-Thrown when price has excessive volatility with stale data
-
-
-```solidity
-error OracleInvalidPriceVolatility(address oracle, int256 price, uint256 volatility);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`oracle`|`address`|The address of the price oracle|
-|`price`|`int256`|The current price|
-|`volatility`|`uint256`|The calculated price change percentage|
-
-### TooManyAssets
-Thrown when trying to add more than 20 different assets to a position
-
-
-```solidity
-error TooManyAssets(address user, uint256 positionId);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|The position owner|
-|`positionId`|`uint256`|The position ID|
-
-### RateTooLow
-Thrown when trying to set a rate below minimum allowed
-
-
-```solidity
-error RateTooLow(uint256 requested, uint256 minimum);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`requested`|`uint256`|The requested rate|
-|`minimum`|`uint256`|The minimum allowed rate|
-
-### RewardTooHigh
-
-```solidity
-error RewardTooHigh(uint256 requested, uint256 max);
-```
-
-### RewardIntervalTooShort
-Thrown when trying to set a reward interval below minimum allowed
-
-
-```solidity
-error RewardIntervalTooShort(uint256 requested, uint256 minimum);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`requested`|`uint256`|The requested interval in seconds|
-|`minimum`|`uint256`|The minimum allowed interval in seconds|
-
-### RewardableSupplyTooLow
-Thrown when trying to set rewardable supply below minimum allowed
-
-
-```solidity
-error RewardableSupplyTooLow(uint256 requested, uint256 minimum);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`requested`|`uint256`|The requested supply amount|
-|`minimum`|`uint256`|The minimum allowed supply amount|
-
-### LiquidatorThresholdTooLow
-Thrown when trying to set liquidator threshold below minimum allowed
-
-
-```solidity
-error LiquidatorThresholdTooLow(uint256 requested, uint256 minimum);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`requested`|`uint256`|The requested threshold amount|
-|`minimum`|`uint256`|The minimum allowed threshold amount|
-
-### RateTooHigh
-Thrown when trying to set a rate above maximum allowed
-
-
-```solidity
-error RateTooHigh(uint256 requested, uint256 maximum);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`requested`|`uint256`|The requested rate|
-|`maximum`|`uint256`|The maximum allowed rate|
-
-### BonusTooHigh
-Thrown when trying to set a bonus above maximum allowed
-
-
-```solidity
-error BonusTooHigh(uint256 requested, uint256 maximum);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`requested`|`uint256`|The requested bonus|
-|`maximum`|`uint256`|The maximum allowed bonus|
 
