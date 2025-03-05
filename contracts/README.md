@@ -6,6 +6,5 @@
 - [interfaces](/contracts/interfaces)
 - [lender](/contracts/lender)
 - [liquidator](/contracts/liquidator)
-- [mock](/contracts/mock)
-- [upgrades](/contracts/upgrades)
-- [vendor](/contracts/vendor)
+- [oracle](/contracts/oracle)
+
