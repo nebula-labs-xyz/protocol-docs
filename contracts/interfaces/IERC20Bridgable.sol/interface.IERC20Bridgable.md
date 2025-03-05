@@ -1,5 +1,5 @@
 # IERC20Bridgable
-[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/921edb5eadadd55e1a3bfce4389f11db33e9cb1a/contracts/interfaces/IERC20Bridgable.sol)
+[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/aaed57cb7ee1c677c0c943d32a39d9411c489fc9/contracts/interfaces/IERC20Bridgable.sol)
 
 **Inherits:**
 IERC20
