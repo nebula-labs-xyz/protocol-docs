@@ -34,6 +34,7 @@
     - [Lendefi](contracts/lender/Lendefi.sol/contract.Lendefi.md)
   - [❱ liquidator](contracts/liquidator/README.md)
     - [FlashLoanRecipient](contracts/liquidator/Liquidator.sol/contract.FlashLoanRecipient.md)
-
+  - [❱ oracle](contracts/oracle/README.md)
+    - [LendefiOracle](contracts/oracle/LendefiOracle.sol/contract.LendefiOracle.md)
 
 
