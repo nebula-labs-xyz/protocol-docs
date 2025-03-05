@@ -1,5 +1,5 @@
 # Lendefi
-[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/921edb5eadadd55e1a3bfce4389f11db33e9cb1a/contracts/lender/Lendefi.sol)
+[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/aaed57cb7ee1c677c0c943d32a39d9411c489fc9/contracts/lender/Lendefi.sol)
 
 # Security Review: Lendefi Protocol Contract
 
@@ -146,7 +146,6 @@ Overall, this is a sophisticated lending protocol with robust security measures 
 alexei@nebula-labs(dot)xyz
 
 
-
 ## State Variables
 ### PAUSER_ROLE
 
@@ -193,6 +192,15 @@ IERC20 internal tokenInstance;
 
 ```solidity
 IECOSYSTEM internal ecosystemInstance;
+```
+
+
+### oracleModule
+*Oracle module for secure price feeds*
+
+
+```solidity
+LendefiOracle internal oracleModule;
 ```
 
 
@@ -408,16 +416,7 @@ List of assets used as collateral in each position
 
 
 ```solidity
-mapping(address => mapping(uint256 => address[])) internal positionCollateralAssets;
-```
-
-
-### pcaPos
-*borrower address position mapping used to remove positonCollateralAssets when needed*
-
-
-```solidity
-mapping(address src => mapping(uint256 => mapping(address => uint256 pos))) internal pcaPos;
+mapping(address => mapping(uint256 => EnumerableSet.AddressSet)) internal positionCollateralAssets;
 ```
 
 
@@ -432,36 +431,25 @@ mapping(address => uint256) public assetTVL;
 ```
 
 
-### tierBaseBorrowRate
+### tierJumpRate
 Base borrow rate for each collateral risk tier
 
 *Higher tiers have higher interest rates due to increased risk*
 
 
 ```solidity
-mapping(CollateralTier => uint256) public tierBaseBorrowRate;
+mapping(CollateralTier => uint256) internal tierJumpRate;
 ```
 
 
-### tierLiquidationBonus
+### tierLiquidationFee
 Liquidation bonus percentage for each collateral tier
 
 *Higher risk tiers have larger liquidation bonuses*
 
 
 ```solidity
-mapping(CollateralTier => uint256) public tierLiquidationBonus;
-```
-
-
-### totalCollateral
-Total amount of each asset used as collateral
-
-*Used for tracking collateral usage and supply caps*
-
-
-```solidity
-mapping(address => uint256) public totalCollateral;
+mapping(CollateralTier => uint256) internal tierLiquidationFee;
 ```
 
 
@@ -573,7 +561,8 @@ function initialize(
     address ecosystem,
     address treasury_,
     address timelock_,
-    address guardian
+    address guardian,
+    address oracle_
 ) external initializer;
 ```
 **Parameters**
@@ -586,6 +575,7 @@ function initialize(
 |`treasury_`|`address`|The address of the treasury that collects protocol fees|
 |`timelock_`|`address`|The address of the timelock contract for governance actions|
 |`guardian`|`address`|The address of the initial admin with pausing capability|
+|`oracle_`|`address`|The address of the oracle module for price feeds|
 
 
 ### pause
@@ -999,25 +989,9 @@ Liquidates an undercollateralized borrowing position
 **Notes:**
 - security: Non-reentrant and pausable to prevent attack vectors
 
-- validation: Checks:
-- Position exists (via validPosition modifier)
-- Liquidator has sufficient governance tokens
-- Position is actually liquidatable
-- Liquidator has sufficient USDC to cover debt + bonus
-
-- rewards: Liquidator receives:
-- All collateral in the position
-- Liquidation bonus (varies by tier)
-
-- events: Emits:
-- Liquidated event with user, position ID, and debt amount
-- WithdrawCollateral events for each collateral asset transferred
-
-- state: Updates:
-- Clears position debt
-- Updates total protocol borrow amount
-- Updates total accrued interest
-- Transfers all collateral to liquidator
+- validation: Added checks:
+- Liquidator has sufficient USDC balance
+- Health factor is below liquidation threshold
 
 
 ```solidity
@@ -1033,6 +1007,46 @@ function liquidate(address user, uint256 positionId)
 |----|----|-----------|
 |`user`|`address`|The address of the position owner to liquidate|
 |`positionId`|`uint256`|The ID of the position to liquidate|
+
+
+### interpositionalTransfer
+
+Moves collateral assets directly between non-isolated positions owned by the same user
+
+*More gas-efficient than withdrawing and redepositing as no token transfers occur*
+
+**Notes:**
+- security: Non-reentrant and pausable to prevent attack vectors
+
+- validation: Checks:
+- Both positions must exist and be active (via activePosition modifier)
+- Neither position can be in isolation mode
+- Asset must be listed and active
+- Source position must have sufficient collateral
+- Source position must remain adequately collateralized after transfer
+- Target position must not exceed maximum asset limit (20)
+
+- events: Emits:
+- InterPositionalTransfer with details of the transfer
+
+
+```solidity
+function interpositionalTransfer(uint256 fromPositionId, uint256 toPositionId, address asset, uint256 amount)
+    external
+    activePosition(msg.sender, fromPositionId)
+    activePosition(msg.sender, toPositionId)
+    validAsset(asset)
+    nonReentrant
+    whenNotPaused;
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`fromPositionId`|`uint256`|ID of the source position to transfer from|
+|`toPositionId`|`uint256`|ID of the destination position to transfer to|
+|`asset`|`address`|Address of the collateral asset to transfer|
+|`amount`|`uint256`|Amount of the asset to transfer|
 
 
 ### updateBaseProfitTarget
@@ -1209,7 +1223,7 @@ Updates the risk parameters for a collateral tier
 
 
 ```solidity
-function updateTierParameters(CollateralTier tier, uint256 borrowRate, uint256 liquidationBonus)
+function updateTierParameters(CollateralTier tier, uint256 borrowRate, uint256 liquidationFee)
     external
     onlyRole(MANAGER_ROLE);
 ```
@@ -1219,7 +1233,7 @@ function updateTierParameters(CollateralTier tier, uint256 borrowRate, uint256 l
 |----|----|-----------|
 |`tier`|`CollateralTier`|The collateral tier to update|
 |`borrowRate`|`uint256`|The new base borrow rate for the tier (in parts per million)|
-|`liquidationBonus`|`uint256`|The new liquidation bonus for the tier (in parts per million)|
+|`liquidationFee`|`uint256`|The new liquidation bonus for the tier (in parts per million)|
 
 
 ### updateAssetTier
@@ -1238,8 +1252,8 @@ Updates the risk tier classification for a listed asset
 - AssetTierUpdated with asset address and new tier
 
 - impact: Changes:
-- Asset's borrow rate via tierBaseBorrowRate
-- Asset's liquidation bonus via tierLiquidationBonus
+- Asset's borrow rate via tierJumpRate
+- Asset's liquidation bonus via tierLiquidationFee
 
 
 ```solidity
@@ -1302,6 +1316,94 @@ function updateAssetConfig(
 |`isolationDebtCap`|`uint256`|Maximum debt allowed when used in isolation mode|
 
 
+### addAssetOracle
+
+Adds an additional oracle data source for an asset
+
+*Allows adding secondary or backup oracles to enhance price reliability*
+
+**Note:**
+security: Can only be called by accounts with MANAGER_ROLE
+
+
+```solidity
+function addAssetOracle(address asset, address oracle, uint8 decimals_)
+    external
+    validAsset(asset)
+    onlyRole(MANAGER_ROLE);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`asset`|`address`|Address of the asset|
+|`oracle`|`address`|Address of the Chainlink price feed to add|
+|`decimals_`|`uint8`|Number of decimals in the oracle price feed|
+
+
+### removeAssetOracle
+
+Removes an oracle data source for an asset
+
+*Allows removing unreliable or deprecated oracles*
+
+**Note:**
+security: Can only be called by accounts with MANAGER_ROLE
+
+
+```solidity
+function removeAssetOracle(address asset, address oracle) external validAsset(asset) onlyRole(MANAGER_ROLE);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`asset`|`address`|Address of the asset|
+|`oracle`|`address`|Address of the Chainlink price feed to remove|
+
+
+### setPrimaryAssetOracle
+
+Sets the primary oracle for an asset
+
+*The primary oracle is used as a fallback when median calculation fails*
+
+**Note:**
+security: Can only be called by accounts with MANAGER_ROLE
+
+
+```solidity
+function setPrimaryAssetOracle(address asset, address oracle) external validAsset(asset) onlyRole(MANAGER_ROLE);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`asset`|`address`|Address of the asset|
+|`oracle`|`address`|Address of the Chainlink price feed to set as primary|
+
+
+### updateOracleTimeThresholds
+
+Updates oracle time thresholds
+
+*Controls how old price data can be before rejection*
+
+**Note:**
+security: Can only be called by accounts with MANAGER_ROLE
+
+
+```solidity
+function updateOracleTimeThresholds(uint256 freshness, uint256 volatility) external onlyRole(MANAGER_ROLE);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`freshness`|`uint256`|Maximum age for all price data (in seconds)|
+|`volatility`|`uint256`|Maximum age for volatile price data (in seconds)|
+
+
 ### getTierRates
 
 Retrieves the current borrow rates and liquidation bonuses for all collateral tiers
@@ -1311,20 +1413,20 @@ Retrieves the current borrow rates and liquidation bonuses for all collateral ti
 **Note:**
 returns-description: Index mapping:
 - [0] = ISOLATED tier rates
-- [1] = CROSS_A tier rates
-- [2] = CROSS_B tier rates
+- [1] = CROSS_B tier rates
+- [2] = CROSS_A tier rates
 - [3] = STABLE tier rates
 
 
 ```solidity
-function getTierRates() external view returns (uint256[4] memory borrowRates, uint256[4] memory liquidationBonuses);
+function getTierRates() external view returns (uint256[4] memory jumpRates, uint256[4] memory liquidationFees);
 ```
 **Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`borrowRates`|`uint256[4]`|Array of borrow rates for each tier [ISOLATED, CROSS_A, CROSS_B, STABLE]|
-|`liquidationBonuses`|`uint256[4]`|Array of liquidation bonuses for each tier [ISOLATED, CROSS_A, CROSS_B, STABLE]|
+|`jumpRates`|`uint256[4]`|Array of borrow rates for each tier [ISOLATED, CROSS_A, CROSS_B, STABLE]|
+|`liquidationFees`|`uint256[4]`|Array of liquidation bonuses for each tier [ISOLATED, CROSS_A, CROSS_B, STABLE]|
 
 
 ### getListedAssets
@@ -1441,6 +1543,29 @@ function getProtocolSnapshot() external view returns (ProtocolSnapshot memory);
 |`<none>`|`ProtocolSnapshot`|ProtocolSnapshot A struct containing: - utilization: Current protocol utilization rate - borrowRate: Base borrow rate (using STABLE tier as reference) - supplyRate: Current supply rate for liquidity providers - totalBorrow: Total amount borrowed from protocol - totalSuppliedLiquidity: Total USDC supplied to protocol - targetReward: Current target reward amount - rewardInterval: Duration of reward period - rewardableSupply: Minimum supply for reward eligibility - baseProfitTarget: Protocol's base profit margin - liquidatorThreshold: Required governance tokens for liquidators - flashLoanFee: Current flash loan fee rate|
 
 
+### getAssetPrice
+
+Gets the current USD price for an asset from the oracle module
+
+*Uses the oracle module to get the median price from multiple sources*
+
+
+```solidity
+function getAssetPrice(address asset) public returns (uint256);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`asset`|`address`|The address of the asset to price|
+
+**Returns**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`<none>`|`uint256`|uint256 The asset price in USD (scaled by oracle decimals)|
+
+
 ### calculateDebtWithInterest
 
 Calculates the total debt amount including accrued interest for a position
@@ -1505,27 +1630,27 @@ function getAssetInfo(address asset) public view returns (Asset memory);
 |`<none>`|`Asset`|Asset struct containing all configuration parameters|
 
 
-### getAssetPrice
+### getAssetPriceOracle
 
-Gets the current USD price for an asset from its oracle
+DEPRECATED: Direct oracle price access
 
-*Fetches price from the asset's configured Chainlink oracle*
+*This function is maintained for backward compatibility*
 
 
 ```solidity
-function getAssetPrice(address asset) public view returns (uint256);
+function getAssetPriceOracle(address oracle) public view returns (uint256);
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`asset`|`address`|The address of the asset to price|
+|`oracle`|`address`|The address of the Chainlink price feed oracle|
 
 **Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint256`|uint256 The asset price in USD (scaled by oracle decimals)|
+|`<none>`|`uint256`|Price from the oracle (use getAssetPrice instead)|
 
 
 ### getUserPositionsCount
@@ -1576,14 +1701,14 @@ function getUserPositions(address user) public view returns (UserPosition[] memo
 
 Gets the liquidation bonus percentage for a specific position
 
-*Returns tier-specific bonus for isolated positions, base fee for cross-collateral*
+*Returns tier-specific bonus for isolated positions, highest tier bonus for cross-collateral*
 
 **Notes:**
 - security: Validates position exists via validPosition modifier
 
 - calculations: Uses:
 - For isolated positions: returns tier's liquidation bonus
-- For cross-collateral: returns base liquidation fee (1%)
+- For cross-collateral: returns highest tier's liquidation bonus
 
 
 ```solidity
@@ -1688,18 +1813,18 @@ function calculateCollateralValue(address user, uint256 positionId)
 
 ### isLiquidatable
 
-Determines if a position can be liquidated based on debt and collateral value
+Determines if a position can be liquidated based on health factor
 
-*A position is liquidatable if debt with interest >= collateral value*
+*A position becomes liquidatable when its health factor falls below 1.0*
 
 **Notes:**
 - validation: Checks:
-- Position exists (via validPosition modifier)
+- Position exists and is active (via activePosition modifier)
 - Position has non-zero debt
 
 - calculations: Uses:
-- calculateDebtWithInterest() for total debt
-- calculateCreditLimit() for collateral value
+- health factor = (collateral value * liquidation threshold) / debt
+- Position is liquidatable when health factor < 1.0
 
 
 ```solidity
@@ -1784,8 +1909,8 @@ Retrieves detailed information about a listed asset
 - state-access: Read-only access to:
 - assetInfo mapping
 - totalCollateral mapping
-- tierBaseBorrowRate mapping
-- tierLiquidationBonus mapping
+- tierJumpRate mapping
+- tierLiquidationFee mapping
 
 
 ```solidity
@@ -1797,7 +1922,7 @@ function getAssetDetails(address asset)
         uint256 totalSupplied,
         uint256 maxSupply,
         uint256 borrowRate,
-        uint256 liquidationBonus,
+        uint256 liquidationFee,
         CollateralTier tier
     );
 ```
@@ -1815,7 +1940,7 @@ function getAssetDetails(address asset)
 |`totalSupplied`|`uint256`|Total amount of asset supplied as collateral|
 |`maxSupply`|`uint256`|Maximum supply threshold allowed|
 |`borrowRate`|`uint256`|Current borrow rate for the asset's tier|
-|`liquidationBonus`|`uint256`|Liquidation bonus percentage for the asset's tier|
+|`liquidationFee`|`uint256`|Liquidation bonus percentage for the asset's tier|
 |`tier`|`CollateralTier`|Risk classification tier of the asset|
 
 
@@ -2043,11 +2168,11 @@ Calculates the current borrow rate for a specific collateral tier
 4. Final rate = baseRate + (tierRate * utilization / WAD)
 
 - formula: 
-finalRate = baseRate + (tierBaseBorrowRate[tier] * utilization / WAD)
+finalRate = baseRate + (tierJumpRate[tier] * utilization / WAD)
 
 - state-access: Read-only access to:
 - baseBorrowRate
-- tierBaseBorrowRate mapping
+- tierJumpRate mapping
 - utilization rate
 
 
@@ -2104,7 +2229,7 @@ function isRewardable(address user) public view returns (bool);
 
 Gets the base liquidation bonus percentage for a specific collateral tier
 
-*Direct accessor for tierLiquidationBonus mapping without additional calculations*
+*Direct accessor for tierLiquidationFee mapping without additional calculations*
 
 **Note:**
 values: Typical values:
@@ -2128,46 +2253,6 @@ function getTierLiquidationFee(CollateralTier tier) public view returns (uint256
 |Name|Type|Description|
 |----|----|-----------|
 |`<none>`|`uint256`|uint256 The liquidation bonus rate in parts per million (e.g., 0.05e6 = 5%)|
-
-
-### getAssetPriceOracle
-
-Retrieves a secure price feed from Chainlink oracle with multiple safety validations
-
-*Implements comprehensive safety measures to ensure price reliability:
-1. Core validations:
-- Ensures reported price is positive
-- Verifies the oracle round is complete and answered
-- Checks price data freshness (< 8 hours old)
-2. Volatility protection:
-- For price changes > 20%, requires fresher data (< 1 hour old)
-- Compares current price against previous round data
-- Prevents manipulation through large short-term price movements*
-
-**Notes:**
-- security-layer: Designed as a critical security component for accurate asset valuation
-
-- error-cases: 
-- OracleInvalidPrice: Price must be > 0
-- OracleStalePrice: Oracle must have answered for the current round
-- OracleTimeout: Price timestamp must be recent (within 8 hours)
-- OracleInvalidPriceVolatility: High volatility prices must be fresh (within 1 hour)
-
-
-```solidity
-function getAssetPriceOracle(address oracle) public view returns (uint256);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`oracle`|`address`|The address of the Chainlink price feed oracle|
-
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`<none>`|`uint256`|Price in USD with oracle's native decimal precision|
 
 
 ### getHighestTier
@@ -2333,6 +2418,79 @@ function _rewardInternal(uint256 amount) internal;
 |Name|Type|Description|
 |----|----|-----------|
 |`amount`|`uint256`|The amount of liquidity being withdrawn or managed|
+
+
+### _checkIsolationConstraints
+
+Checks isolation constraints for interpositional transfers
+
+*Prevents transfers involving isolated positions as they have special collateral restrictions*
+
+
+```solidity
+function _checkIsolationConstraints(address user, uint256 sourceId, uint256 targetId) internal view returns (bool);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`user`|`address`|Address of the position owner|
+|`sourceId`|`uint256`|ID of the source position|
+|`targetId`|`uint256`|ID of the destination position|
+
+**Returns**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`<none>`|`bool`|bool True if either position is isolated (transfers not allowed)|
+
+
+### _validateAndReduceSourceCollateral
+
+Validates and reduces source collateral, ensuring position remains adequately collateralized
+
+*Combines balance checking, collateral reduction, and collateralization validation in one function*
+
+**Notes:**
+- error: InsufficientCollateralBalance if amount exceeds available balance
+
+- error: WithdrawalExceedsCreditLimit if remaining collateral doesn't support debt
+
+
+```solidity
+function _validateAndReduceSourceCollateral(address user, uint256 positionId, address asset, uint256 amount) internal;
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`user`|`address`|Address of the position owner|
+|`positionId`|`uint256`|ID of the source position|
+|`asset`|`address`|Address of the collateral asset|
+|`amount`|`uint256`|Amount of the asset to transfer|
+
+
+### _updateTargetPosition
+
+Updates target position with transferred collateral
+
+*Adds the asset to the position's set if not present and increases balance*
+
+**Note:**
+error: TooManyAssets if position would exceed 20 assets limit
+
+
+```solidity
+function _updateTargetPosition(address user, uint256 positionId, address asset, uint256 amount) internal;
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`user`|`address`|Address of the position owner|
+|`positionId`|`uint256`|ID of the destination position|
+|`asset`|`address`|Address of the collateral asset|
+|`amount`|`uint256`|Amount of the asset to transfer|
 
 
 ### _update
