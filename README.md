@@ -187,11 +187,6 @@ require GPL-v3.0. The smart contracts are labeled accordingly.
 
 You need to hold 20_000 governance tokens to be able to run liquidations on the Lendefi Protocol.
 
-## Running tests
-
-This is a foundry repository. To get more information visit [Foundry](https://github.com/foundry-rs/foundry/blob/master/foundryup/README.md).
-You must have foundry installed.
-
 
 ## Running tests
 
