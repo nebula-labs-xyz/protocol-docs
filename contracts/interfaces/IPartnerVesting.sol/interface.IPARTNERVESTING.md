@@ -1,5 +1,5 @@
 # IPARTNERVESTING
-[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/921edb5eadadd55e1a3bfce4389f11db33e9cb1a/contracts/interfaces/IPartnerVesting.sol)
+[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/aaed57cb7ee1c677c0c943d32a39d9411c489fc9/contracts/interfaces/IPartnerVesting.sol)
 
 Interface for partner vesting contracts with cancellation capabilities
 
@@ -101,19 +101,73 @@ function released() external view returns (uint256);
 
 
 ## Events
-### Cancelled
-*Emitted when partner vesting is cancelled and remaining tokens returned to timelock*
+### VestingInitialized
+Emitted when the vesting contract is initialized
 
 
 ```solidity
-event Cancelled(uint256 amount);
+event VestingInitialized(
+    address indexed token, address indexed beneficiary, address indexed timelock, uint64 startTimestamp, uint64 duration
+);
 ```
 
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`token`|`address`|Address of the ERC20 token being vested|
+|`beneficiary`|`address`|Address that will receive the vested tokens|
+|`timelock`|`address`|Address of the governance timelock|
+|`startTimestamp`|`uint64`|When the vesting schedule starts|
+|`duration`|`uint64`|Length of the vesting period in seconds|
+
+### Cancelled
+Emitted when the vesting contract is cancelled
+
+
+```solidity
+event Cancelled(uint256 remainingTokens);
+```
+
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`remainingTokens`|`uint256`|Amount of unvested tokens returned to the creator|
+
 ### ERC20Released
-*Emitted when tokens are released to the beneficiary*
+Emitted when tokens are released to the beneficiary
 
 
 ```solidity
 event ERC20Released(address indexed token, uint256 amount);
+```
+
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`token`|`address`|Address of the ERC20 token being released|
+|`amount`|`uint256`|Amount of tokens released|
+
+## Errors
+### Unauthorized
+Unauthorized access attempt
+
+*Thrown when a function restricted to the creator is called by someone else*
+
+
+```solidity
+error Unauthorized();
+```
+
+### ZeroAddress
+Zero address provided for a critical parameter
+
+*Thrown when token, timelock, or beneficiary address is zero*
+
+
+```solidity
+error ZeroAddress();
 ```
 
