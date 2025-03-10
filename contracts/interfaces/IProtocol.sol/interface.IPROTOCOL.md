@@ -1,8 +1,5 @@
 # IPROTOCOL
-[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/aaed57cb7ee1c677c0c943d32a39d9411c489fc9/contracts/interfaces/IProtocol.sol)
-
-**Inherits:**
-IERC20
+[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/7882024792b94909a5d6c51ec494855406aaf294/contracts/interfaces/IProtocol.sol)
 
 
 ## Functions
@@ -10,7 +7,7 @@ IERC20
 
 Initializes the protocol with core dependencies and parameters
 
-*Sets up ERC20 token details, access control roles, and default protocol parameters*
+*Sets up access control roles and default protocol parameters*
 
 
 ```solidity
@@ -20,8 +17,9 @@ function initialize(
     address ecosystem,
     address treasury_,
     address timelock_,
-    address guardian,
-    address oracle_
+    address yieldToken,
+    address assetsModule,
+    address guardian
 ) external;
 ```
 **Parameters**
@@ -33,8 +31,30 @@ function initialize(
 |`ecosystem`|`address`|The address of the ecosystem contract that manages rewards|
 |`treasury_`|`address`|The address of the treasury that collects protocol fees|
 |`timelock_`|`address`|The address of the timelock contract for governance actions|
+|`yieldToken`|`address`|The address of the yield token contract|
+|`assetsModule`|`address`||
 |`guardian`|`address`|The address of the initial admin with pausing capability|
-|`oracle_`|`address`|The address of the oracle module for price feeds|
+
+
+### assetTVL
+
+Returns the total value locked for a specific asset
+
+
+```solidity
+function assetTVL(address asset) external view returns (uint256);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`asset`|`address`|The address of the asset to query|
+
+**Returns**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`<none>`|`uint256`|Total amount of the asset held in the protocol|
 
 
 ### pause
@@ -67,14 +87,13 @@ Executes a flash loan, allowing borrowing without collateral if repaid in same t
 
 
 ```solidity
-function flashLoan(address receiver, address token, uint256 amount, bytes calldata params) external;
+function flashLoan(address receiver, uint256 amount, bytes calldata params) external;
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
 |`receiver`|`address`|The contract address that will receive the flash loaned tokens|
-|`token`|`address`|The address of the token to borrow (currently only supports USDC)|
 |`amount`|`uint256`|The amount of tokens to flash loan|
 |`params`|`bytes`|Arbitrary data to pass to the receiver contract|
 
@@ -94,182 +113,6 @@ function updateFlashLoanFee(uint256 newFee) external;
 |Name|Type|Description|
 |----|----|-----------|
 |`newFee`|`uint256`|The new flash loan fee (scaled by 1000, e.g., 5 = 0.5%)|
-
-
-### updateBaseProfitTarget
-
-Updates the target profit rate for the protocol
-
-*Can only be called by authorized governance roles*
-
-
-```solidity
-function updateBaseProfitTarget(uint256 rate) external;
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`rate`|`uint256`|The new base profit target rate (scaled by RAY)|
-
-
-### updateBaseBorrowRate
-
-Updates the base interest rate charged on borrowing
-
-*Can only be called by authorized governance roles*
-
-
-```solidity
-function updateBaseBorrowRate(uint256 rate) external;
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`rate`|`uint256`|The new base borrow rate (scaled by RAY)|
-
-
-### updateTargetReward
-
-Updates the target reward amount for liquidity providers
-
-*Can only be called by authorized governance roles*
-
-
-```solidity
-function updateTargetReward(uint256 amount) external;
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`amount`|`uint256`|The new target reward amount per distribution interval|
-
-
-### updateRewardInterval
-
-Updates the time interval between reward distributions
-
-*Can only be called by authorized governance roles*
-
-
-```solidity
-function updateRewardInterval(uint256 interval) external;
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`interval`|`uint256`|The new reward interval in seconds|
-
-
-### updateRewardableSupply
-
-Updates the minimum liquidity threshold required to be eligible for rewards
-
-*Can only be called by authorized governance roles*
-
-
-```solidity
-function updateRewardableSupply(uint256 amount) external;
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`amount`|`uint256`|The new minimum liquidity threshold|
-
-
-### updateLiquidatorThreshold
-
-Updates the minimum governance token threshold required to be a liquidator
-
-*Can only be called by authorized governance roles*
-
-
-```solidity
-function updateLiquidatorThreshold(uint256 amount) external;
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`amount`|`uint256`|The new liquidator threshold amount|
-
-
-### updateTierParameters
-
-Updates the borrowing rate and liquidation bonus parameters for a collateral tier
-
-*Can only be called by authorized governance roles*
-
-
-```solidity
-function updateTierParameters(CollateralTier tier, uint256 borrowRate, uint256 liquidationFee) external;
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`tier`|`CollateralTier`|The collateral tier to update|
-|`borrowRate`|`uint256`|The new borrow rate multiplier (scaled by RAY)|
-|`liquidationFee`|`uint256`|The new liquidation bonus percentage (scaled by 1000)|
-
-
-### updateAssetTier
-
-Updates the risk classification tier of an asset
-
-*Can only be called by authorized governance roles*
-
-
-```solidity
-function updateAssetTier(address asset, CollateralTier newTier) external;
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|The address of the asset to update|
-|`newTier`|`CollateralTier`|The new collateral tier to assign to the asset|
-
-
-### updateAssetConfig
-
-Updates or adds a new collateral asset with all configuration parameters
-
-*Can only be called by authorized governance roles*
-
-
-```solidity
-function updateAssetConfig(
-    address asset,
-    address oracle_,
-    uint8 oracleDecimals,
-    uint8 assetDecimals,
-    uint8 active,
-    uint32 borrowThreshold,
-    uint32 liquidationThreshold,
-    uint256 maxSupplyLimit,
-    CollateralTier tier,
-    uint256 isolationDebtCap
-) external;
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|The address of the asset to configure|
-|`oracle_`|`address`|The address of the price oracle for this asset|
-|`oracleDecimals`|`uint8`|The decimal precision of the price oracle|
-|`assetDecimals`|`uint8`|The decimal precision of the asset token|
-|`active`|`uint8`|Whether the asset is active (1) or disabled (0)|
-|`borrowThreshold`|`uint32`|The LTV ratio for borrowing (scaled by 1000)|
-|`liquidationThreshold`|`uint32`|The LTV ratio for liquidation (scaled by 1000)|
-|`maxSupplyLimit`|`uint256`|The maximum amount that can be supplied as collateral|
-|`tier`|`CollateralTier`|The risk classification tier of the asset|
-|`isolationDebtCap`|`uint256`|The maximum debt allowed when used in isolation mode|
 
 
 ### supplyLiquidity
@@ -425,48 +268,6 @@ function liquidate(address user, uint256 positionId) external;
 |`positionId`|`uint256`|The ID of the position to liquidate|
 
 
-### getAssetInfo
-
-Retrieves the configuration data for a collateral asset
-
-
-```solidity
-function getAssetInfo(address asset) external view returns (Asset memory);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|The address of the asset|
-
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`<none>`|`Asset`|Asset struct containing all configuration parameters|
-
-
-### getAssetPrice
-
-Gets the current USD price of an asset
-
-
-```solidity
-function getAssetPrice(address asset) external returns (uint256);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|The address of the asset|
-
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`<none>`|`uint256`|The asset price in USD (scaled by the asset's oracle decimals)|
-
-
 ### getUserPositionsCount
 
 Gets the total number of positions created by a user
@@ -531,13 +332,13 @@ function getUserPosition(address user, uint256 positionId) external view returns
 |`<none>`|`UserPosition`|UserPosition struct containing position data|
 
 
-### getUserCollateralAmount
+### getCollateralAmount
 
 Gets the amount of a specific asset in a position
 
 
 ```solidity
-function getUserCollateralAmount(address user, uint256 positionId, address asset) external view returns (uint256);
+function getCollateralAmount(address user, uint256 positionId, address asset) external view returns (uint256);
 ```
 **Parameters**
 
@@ -552,21 +353,6 @@ function getUserCollateralAmount(address user, uint256 positionId, address asset
 |Name|Type|Description|
 |----|----|-----------|
 |`<none>`|`uint256`|The amount of the asset in the position|
-
-
-### getProtocolSnapshot
-
-Gets the current state of all protocol parameters
-
-
-```solidity
-function getProtocolSnapshot() external view returns (ProtocolSnapshot memory);
-```
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`<none>`|`ProtocolSnapshot`|ProtocolSnapshot struct with current protocol state|
 
 
 ### calculateDebtWithInterest
@@ -635,6 +421,51 @@ function calculateCreditLimit(address user, uint256 positionId) external view re
 |`<none>`|`uint256`|The maximum borrowing capacity (credit limit)|
 
 
+### calculateCollateralValue
+
+Calculates the total USD value of all collateral in a position
+
+*Aggregates values across all collateral assets using oracle price feeds*
+
+
+```solidity
+function calculateCollateralValue(address user, uint256 positionId) external view returns (uint256);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`user`|`address`|The address of the position owner|
+|`positionId`|`uint256`|The ID of the position|
+
+**Returns**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`<none>`|`uint256`|The total value of all collateral assets in the position in USD terms|
+
+
+### getLiquidityAccrueTimeIndex
+
+Gets the timestamp of the last liquidity reward accrual for a user
+
+
+```solidity
+function getLiquidityAccrueTimeIndex(address user) external view returns (uint256);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`user`|`address`|The address of the user|
+
+**Returns**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`<none>`|`uint256`|The timestamp when rewards were last accrued|
+
+
 ### isLiquidatable
 
 Checks if a position is eligible for liquidation
@@ -655,76 +486,6 @@ function isLiquidatable(address user, uint256 positionId) external view returns 
 |Name|Type|Description|
 |----|----|-----------|
 |`<none>`|`bool`|True if the position can be liquidated, false otherwise|
-
-
-### getAssetDetails
-
-Gets detailed information about an asset
-
-
-```solidity
-function getAssetDetails(address asset)
-    external
-    view
-    returns (
-        uint256 price,
-        uint256 totalSupplied,
-        uint256 maxSupply,
-        uint256 borrowRate,
-        uint256 liquidationFee,
-        CollateralTier tier
-    );
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|The address of the asset|
-
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`price`|`uint256`|The current USD price|
-|`totalSupplied`|`uint256`|The total amount supplied as collateral|
-|`maxSupply`|`uint256`|The maximum supply threshold|
-|`borrowRate`|`uint256`|The current borrow interest rate|
-|`liquidationFee`|`uint256`|The liquidation bonus percentage|
-|`tier`|`CollateralTier`|The collateral tier classification|
-
-
-### getLPInfo
-
-Gets information about a user's LP token position
-
-
-```solidity
-function getLPInfo(address user)
-    external
-    view
-    returns (
-        uint256 lpTokenBalance,
-        uint256 usdcValue,
-        uint256 lastAccrualTime,
-        bool isRewardEligible,
-        uint256 pendingRewards
-    );
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|The address of the user|
-
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`lpTokenBalance`|`uint256`|The user's LP token balance|
-|`usdcValue`|`uint256`|The USDC value of the LP tokens|
-|`lastAccrualTime`|`uint256`|The timestamp of last interest accrual|
-|`isRewardEligible`|`bool`|Whether the user is eligible for rewards|
-|`pendingRewards`|`uint256`|The pending reward amount|
 
 
 ### healthFactor
@@ -773,28 +534,6 @@ function getPositionCollateralAssets(address user, uint256 positionId) external 
 |`<none>`|`address[]`|An array of asset addresses in the position|
 
 
-### getPositionDebt
-
-Gets the current debt amount for a position
-
-
-```solidity
-function getPositionDebt(address user, uint256 positionId) external view returns (uint256);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the position|
-
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`<none>`|`uint256`|The current debt amount including interest|
-
-
 ### getUtilization
 
 Calculates the current utilization rate of the protocol
@@ -833,13 +572,13 @@ Gets the current borrow interest rate for a specific tier
 
 
 ```solidity
-function getBorrowRate(CollateralTier tier) external view returns (uint256);
+function getBorrowRate(ILendefiAssets.CollateralTier tier) external view returns (uint256);
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`tier`|`CollateralTier`|The collateral tier to query|
+|`tier`|`ILendefiAssets.CollateralTier`|The collateral tier to query|
 
 **Returns**
 
@@ -867,103 +606,6 @@ function isRewardable(address user) external view returns (bool);
 |Name|Type|Description|
 |----|----|-----------|
 |`<none>`|`bool`|True if user is eligible for rewards, false otherwise|
-
-
-### getTierLiquidationFee
-
-Gets the liquidation fee percentage for a collateral tier
-
-
-```solidity
-function getTierLiquidationFee(CollateralTier tier) external view returns (uint256);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`tier`|`CollateralTier`|The collateral tier to query|
-
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`<none>`|`uint256`|The liquidation fee percentage (scaled by 1000)|
-
-
-### getAssetPriceOracle
-
-Gets the price from a specific oracle
-
-*Validates the oracle data is fresh and within expected range*
-
-
-```solidity
-function getAssetPriceOracle(address oracle) external view returns (uint256);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`oracle`|`address`|The address of the price oracle|
-
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`<none>`|`uint256`|The price returned by the oracle|
-
-
-### getHighestTier
-
-Determines the highest risk tier among collateral assets in a position
-
-
-```solidity
-function getHighestTier(address user, uint256 positionId) external view returns (CollateralTier);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the position|
-
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`<none>`|`CollateralTier`|The highest risk CollateralTier in the position|
-
-
-### getTierRates
-
-Gets all configured rates for each collateral tier
-
-
-```solidity
-function getTierRates() external view returns (uint256[4] memory borrowRates, uint256[4] memory liquidationFeees);
-```
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`borrowRates`|`uint256[4]`|Array of borrow rates for each tier (scaled by RAY)|
-|`liquidationFeees`|`uint256[4]`|Array of liquidation bonuses for each tier (scaled by 1000)|
-
-
-### getListedAssets
-
-Gets all assets listed in the protocol
-
-
-```solidity
-function getListedAssets() external view returns (address[] memory);
-```
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`<none>`|`address[]`|An array of asset addresses|
 
 
 ### version
@@ -1039,21 +681,6 @@ function totalAccruedSupplierInterest() external view returns (uint256);
 |Name|Type|Description|
 |----|----|-----------|
 |`<none>`|`uint256`|The total accrued supplier interest|
-
-
-### withdrawnLiquidity
-
-Gets the total liquidity withdrawn from the protocol
-
-
-```solidity
-function withdrawnLiquidity() external view returns (uint256);
-```
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`<none>`|`uint256`|The total withdrawn liquidity|
 
 
 ### targetReward
@@ -1191,98 +818,49 @@ function treasury() external view returns (address);
 |`<none>`|`address`|The treasury contract address|
 
 
-### assetTVL
+### getPositionTier
 
-Gets the total value locked for a specific asset
+Determines the collateral tier of a position for risk assessment
+
+*For cross-collateral positions, returns the tier of the riskiest asset*
+
+*For isolated positions, returns ISOLATED tier regardless of asset*
 
 
 ```solidity
-function assetTVL(address asset) external view returns (uint256);
+function getPositionTier(address user, uint256 positionId) external view returns (ILendefiAssets.CollateralTier);
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`asset`|`address`|The address of the asset|
+|`user`|`address`|The address of the position owner|
+|`positionId`|`uint256`|The ID of the position|
 
 **Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint256`|The total value locked (TVL) amount|
+|`<none>`|`ILendefiAssets.CollateralTier`|The position's collateral tier (STABLE, CROSS_A, CROSS_B, or ISOLATED)|
 
 
-### addAssetOracle
+### interpositionalTransfer
 
-Adds an additional oracle data source for an asset
-
-*Allows adding secondary or backup oracles to enhance price reliability*
+Transfers collateral between two positions owned by the same user
 
 
 ```solidity
-function addAssetOracle(address asset, address oracle, uint8 decimals) external;
+function interpositionalTransfer(uint256 fromPositionId, uint256 toPositionId, address asset, uint256 amount)
+    external;
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`asset`|`address`|Address of the asset|
-|`oracle`|`address`|Address of the Chainlink price feed to add|
-|`decimals`|`uint8`|Number of decimals in the oracle price feed|
-
-
-### removeAssetOracle
-
-Removes an oracle data source for an asset
-
-*Allows removing unreliable or deprecated oracles*
-
-
-```solidity
-function removeAssetOracle(address asset, address oracle) external;
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|Address of the asset|
-|`oracle`|`address`|Address of the Chainlink price feed to remove|
-
-
-### setPrimaryAssetOracle
-
-Sets the primary oracle for an asset
-
-*The primary oracle is used as a fallback when median calculation fails*
-
-
-```solidity
-function setPrimaryAssetOracle(address asset, address oracle) external;
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|Address of the asset|
-|`oracle`|`address`|Address of the Chainlink price feed to set as primary|
-
-
-### updateOracleTimeThresholds
-
-Updates oracle time thresholds
-
-*Controls how old price data can be before rejection*
-
-
-```solidity
-function updateOracleTimeThresholds(uint256 freshness, uint256 volatility) external;
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`freshness`|`uint256`|Maximum age for all price data (in seconds)|
-|`volatility`|`uint256`|Maximum age for volatile price data (in seconds)|
+|`fromPositionId`|`uint256`|The ID of the position to transfer collateral from|
+|`toPositionId`|`uint256`|The ID of the position to transfer collateral to|
+|`asset`|`address`|The address of the collateral asset to transfer|
+|`amount`|`uint256`|The amount of the asset to transfer|
 
 
 ## Events
@@ -1494,89 +1072,18 @@ event FlashLoan(
 |`amount`|`uint256`|Amount borrowed|
 |`fee`|`uint256`|Fee charged for the flash loan|
 
-### UpdateBaseProfitTarget
-Emitted when the base profit target is updated
-
+### ProtocolMetricsUpdated
 
 ```solidity
-event UpdateBaseProfitTarget(uint256 rate);
+event ProtocolMetricsUpdated(
+    uint256 profitTargetRate,
+    uint256 borrowRate,
+    uint256 rewardAmount,
+    uint256 interval,
+    uint256 supplyAmount,
+    uint256 liquidatorAmount
+);
 ```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`rate`|`uint256`|New base profit target rate|
-
-### UpdateBaseBorrowRate
-Emitted when the base borrow rate is updated
-
-
-```solidity
-event UpdateBaseBorrowRate(uint256 rate);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`rate`|`uint256`|New base borrow rate|
-
-### UpdateTargetReward
-Emitted when the target reward amount is updated
-
-
-```solidity
-event UpdateTargetReward(uint256 amount);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`amount`|`uint256`|New target reward amount|
-
-### UpdateRewardInterval
-Emitted when the reward interval is updated
-
-
-```solidity
-event UpdateRewardInterval(uint256 interval);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`interval`|`uint256`|New reward interval in seconds|
-
-### UpdateRewardableSupply
-Emitted when the rewardable supply threshold is updated
-
-
-```solidity
-event UpdateRewardableSupply(uint256 amount);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`amount`|`uint256`|New rewardable supply threshold|
-
-### UpdateLiquidatorThreshold
-Emitted when the liquidator governance token threshold is updated
-
-
-```solidity
-event UpdateLiquidatorThreshold(uint256 amount);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`amount`|`uint256`|New liquidator threshold|
 
 ### UpdateFlashLoanFee
 Emitted when the flash loan fee is updated
@@ -1591,127 +1098,6 @@ event UpdateFlashLoanFee(uint256 fee);
 |Name|Type|Description|
 |----|----|-----------|
 |`fee`|`uint256`|New flash loan fee (scaled by 1000)|
-
-### TierParametersUpdated
-Emitted when tier parameters are updated
-
-
-```solidity
-event TierParametersUpdated(CollateralTier tier, uint256 borrowRate, uint256 liquidationFee);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`tier`|`CollateralTier`|Collateral tier being updated|
-|`borrowRate`|`uint256`|New borrow rate for the tier|
-|`liquidationFee`|`uint256`|New liquidation bonus for the tier|
-
-### AssetTierUpdated
-Emitted when an asset's tier classification is updated
-
-
-```solidity
-event AssetTierUpdated(address indexed asset, CollateralTier indexed newTier);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|Address of the asset being updated|
-|`newTier`|`CollateralTier`|New collateral tier assigned to the asset|
-
-### UpdateAssetConfig
-Emitted when an asset's configuration is updated
-
-
-```solidity
-event UpdateAssetConfig(address indexed asset);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|Address of the updated asset|
-
-### TVLUpdated
-Emitted when an asset's TVL is updated
-
-
-```solidity
-event TVLUpdated(address indexed asset, uint256 amount);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|Address of the asset|
-|`amount`|`uint256`|New TVL amount|
-
-### OracleAdded
-Emitted when an additional oracle is added for an asset
-
-
-```solidity
-event OracleAdded(address indexed asset, address indexed oracle, uint8 decimals);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|Address of the asset|
-|`oracle`|`address`|Address of the oracle being added|
-|`decimals`|`uint8`|Number of decimals in the oracle price feed|
-
-### OracleRemoved
-Emitted when an oracle is removed from an asset
-
-
-```solidity
-event OracleRemoved(address indexed asset, address indexed oracle);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|Address of the asset|
-|`oracle`|`address`|Address of the oracle being removed|
-
-### PrimaryOracleSet
-Emitted when a new primary oracle is set for an asset
-
-
-```solidity
-event PrimaryOracleSet(address indexed asset, address indexed oracle);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|Address of the asset|
-|`oracle`|`address`|Address of the oracle set as primary|
-
-### OracleThresholdsUpdated
-Emitted when oracle time thresholds are updated
-
-
-```solidity
-event OracleThresholdsUpdated(uint256 freshness, uint256 volatility);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`freshness`|`uint256`|New maximum age for all price data (in seconds)|
-|`volatility`|`uint256`|New maximum age for volatile price data (in seconds)|
 
 ### Liquidated
 Emitted when a position is liquidated
@@ -1729,40 +1115,12 @@ event Liquidated(address indexed user, uint256 indexed positionId, address liqui
 |`positionId`|`uint256`|The ID of the inactive position|
 |`liquidator`|`address`|The address of the liquidator|
 
-### LiquidationMetrics
-Emitted when a position is liquidated
-
-
-```solidity
-event LiquidationMetrics(
-    address indexed user,
-    uint256 indexed positionId,
-    uint256 debtAmount,
-    uint256 bonusAmount,
-    uint256 collateralValue,
-    uint256 healthFactor
-);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the inactive position|
-|`debtAmount`|`uint256`|Debt amount|
-|`bonusAmount`|`uint256`|Bonus Amount|
-|`collateralValue`|`uint256`|Collateral value|
-|`healthFactor`|`uint256`|Health Factor|
-
 ### InterPositionalTransfer
 Emitted when collateral is transferred between positions
 
 
 ```solidity
-event InterPositionalTransfer(
-    address indexed user, uint256 indexed fromPositionId, uint256 indexed toPositionId, address asset, uint256 amount
-);
+event InterPositionalTransfer(address indexed user, address asset, uint256 amount);
 ```
 
 **Parameters**
@@ -1770,595 +1128,276 @@ event InterPositionalTransfer(
 |Name|Type|Description|
 |----|----|-----------|
 |`user`|`address`|Address of the position owner|
-|`fromPositionId`|`uint256`|Source position ID|
-|`toPositionId`|`uint256`|Target position ID|
 |`asset`|`address`|Address of the transferred asset|
 |`amount`|`uint256`|Amount of the asset transferred|
 
+### TVLUpdated
+Emitted when an asset's total value locked (TVL) is updated
+
+
+```solidity
+event TVLUpdated(address indexed asset, uint256 amount);
+```
+
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`asset`|`address`|The address of the asset that was updated|
+|`amount`|`uint256`|The new TVL amount|
+
 ## Errors
+### MaxPositionLimitReached
+Thrown when attempting to create more positions than the protocol limit
+
+*The protocol enforces a maximum number of positions per user*
+
+
+```solidity
+error MaxPositionLimitReached();
+```
+
 ### InvalidPosition
-Thrown when a position ID is invalid for a user
+Thrown when attempting to interact with a non-existent position
+
+*Functions that require a valid position ID will throw this error*
 
 
 ```solidity
-error InvalidPosition(address user, uint256 positionId);
+error InvalidPosition();
 ```
 
-**Parameters**
+### InactivePosition
+Thrown when attempting to modify a position that is closed or liquidated
 
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The invalid position ID|
-
-### InsufficientGovTokens
-Thrown when a liquidator has insufficient governance tokens
+*Operations are only allowed on positions with ACTIVE status*
 
 
 ```solidity
-error InsufficientGovTokens(address liquidator, uint256 required, uint256 balance);
+error InactivePosition();
 ```
 
-**Parameters**
+### NotListed
+Thrown when attempting to use an asset that isn't listed in the protocol
 
-|Name|Type|Description|
-|----|----|-----------|
-|`liquidator`|`address`|The address attempting to liquidate|
-|`required`|`uint256`|The required amount of governance tokens|
-|`balance`|`uint256`|The liquidator's actual balance|
-
-### NotLiquidatable
-Thrown when attempting to liquidate a healthy position
+*Assets must be configured through governance before they can be used*
 
 
 ```solidity
-error NotLiquidatable(address user, uint256 positionId);
+error NotListed();
 ```
 
-**Parameters**
+### ZeroAmount
+Thrown when an operation is attempted with a zero amount
 
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the position that can't be liquidated|
-
-### InsufficientFlashLoanLiquidity
-Thrown when there's insufficient liquidity for a flash loan
+*Used in borrow, repay, supply and withdraw operations*
 
 
 ```solidity
-error InsufficientFlashLoanLiquidity(address token, uint256 requested, uint256 available);
+error ZeroAmount();
 ```
 
-**Parameters**
+### InvalidFee
+Thrown when attempting to set an invalid flash loan fee
 
-|Name|Type|Description|
-|----|----|-----------|
-|`token`|`address`|The address of the requested token|
-|`requested`|`uint256`|The amount requested|
-|`available`|`uint256`|The actual available liquidity|
+*Fee must be within the allowed range (0-100 basis points)*
+
+
+```solidity
+error InvalidFee();
+```
+
+### LowLiquidity
+Thrown when the protocol does not have enough liquidity for an operation
+
+*Used in borrow and flash loan operations*
+
+
+```solidity
+error LowLiquidity();
+```
 
 ### FlashLoanFailed
-Thrown when a flash loan execution fails
+Thrown when a flash loan operation fails to execute properly
+
+*The receiver contract must return true from executeOperation*
 
 
 ```solidity
 error FlashLoanFailed();
 ```
 
-### FlashLoanFundsNotReturned
-Thrown when flash loan funds aren't fully returned with fees
+### RepaymentFailed
+Thrown when a flash loan isn't repaid in the same transaction
+
+*The full amount plus fee must be returned to the protocol*
 
 
 ```solidity
-error FlashLoanFundsNotReturned(uint256 expected, uint256 actual);
+error RepaymentFailed();
 ```
 
-**Parameters**
+### AssetCapacityReached
+Thrown when attempting to supply an asset beyond its protocol-wide capacity
 
-|Name|Type|Description|
-|----|----|-----------|
-|`expected`|`uint256`|The expected amount to be returned|
-|`actual`|`uint256`|The actual amount returned|
-
-### OnlyUsdcSupported
-Thrown when attempting flash loan with unsupported token
+*Each asset has a maximum supply limit for risk management*
 
 
 ```solidity
-error OnlyUsdcSupported(address token);
+error AssetCapacityReached();
 ```
 
-**Parameters**
+### IsolatedAssetViolation
+Thrown when attempting to violate isolation mode rules
 
-|Name|Type|Description|
-|----|----|-----------|
-|`token`|`address`|The address of the unsupported token|
-
-### FeeTooHigh
-Thrown when attempting to set a fee higher than allowed
+*Isolated assets cannot be used in cross-collateralized positions*
 
 
 ```solidity
-error FeeTooHigh(uint256 requested, uint256 max);
+error IsolatedAssetViolation();
 ```
 
-**Parameters**
+### InvalidAssetForIsolation
+Thrown when attempting to add an incompatible asset to an isolated position
 
-|Name|Type|Description|
-|----|----|-----------|
-|`requested`|`uint256`|The requested fee|
-|`max`|`uint256`|The maximum allowed fee|
-
-### FeeTooLow
-Thrown when attempting to set a fee higher than allowed
+*Isolated positions can only contain one asset type*
 
 
 ```solidity
-error FeeTooLow(uint256 requested, uint256 min);
+error InvalidAssetForIsolation();
 ```
 
-**Parameters**
+### MaximumAssetsReached
+Thrown when attempting to add more assets than the position limit
 
-|Name|Type|Description|
-|----|----|-----------|
-|`requested`|`uint256`|The requested fee|
-|`min`|`uint256`|The minimum allowed fee|
-
-### InsufficientTokenBalance
-Thrown when a user has insufficient token balance
+*Each position has a maximum number of different asset types it can hold*
 
 
 ```solidity
-error InsufficientTokenBalance(address token, address user, uint256 available);
+error MaximumAssetsReached();
 ```
 
-**Parameters**
+### LowBalance
+Thrown when attempting to withdraw more than the available balance
 
-|Name|Type|Description|
-|----|----|-----------|
-|`token`|`address`|The address of the token|
-|`user`|`address`|The address of the user|
-|`available`|`uint256`|The user's actual balance|
-
-### AssetNotListed
-Thrown when attempting to use an asset not listed in the protocol
+*Used in withdrawCollateral and interpositionalTransfer operations*
 
 
 ```solidity
-error AssetNotListed(address asset);
+error LowBalance();
 ```
 
-**Parameters**
+### NotEnoughGovernanceTokens
+Thrown when a liquidator doesn't hold enough governance tokens
 
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|The address of the unlisted asset|
-
-### InsufficientLiquidity
-Thrown when protocol has insufficient liquidity for borrowing
+*Liquidators must meet a minimum governance token threshold*
 
 
 ```solidity
-error InsufficientLiquidity(uint256 requested, uint256 available);
+error NotEnoughGovernanceTokens();
 ```
 
-**Parameters**
+### NotLiquidatable
+Thrown when attempting to liquidate a healthy position
 
-|Name|Type|Description|
-|----|----|-----------|
-|`requested`|`uint256`|The requested amount|
-|`available`|`uint256`|The actual available liquidity|
+*Positions must be below liquidation threshold to be liquidated*
+
+
+```solidity
+error NotLiquidatable();
+```
+
+### InvalidProfitTarget
+Thrown when attempting to set an invalid profit target
+
+*Profit target must be above the minimum threshold*
+
+
+```solidity
+error InvalidProfitTarget();
+```
+
+### InvalidBorrowRate
+Thrown when attempting to set an invalid borrow rate
+
+*Borrow rate must be above the minimum threshold*
+
+
+```solidity
+error InvalidBorrowRate();
+```
+
+### InvalidRewardAmount
+Thrown when attempting to set an invalid reward amount
+
+*Reward amount must be within allowed limits*
+
+
+```solidity
+error InvalidRewardAmount();
+```
+
+### InvalidInterval
+Thrown when attempting to set an invalid reward interval
+
+*Reward interval must be above the minimum threshold*
+
+
+```solidity
+error InvalidInterval();
+```
+
+### InvalidSupplyAmount
+Thrown when attempting to set an invalid rewardable supply amount
+
+*Rewardable supply must be above the minimum threshold*
+
+
+```solidity
+error InvalidSupplyAmount();
+```
+
+### InvalidLiquidatorThreshold
+Thrown when attempting to set an invalid liquidator threshold
+
+*Liquidator threshold must be above the minimum value*
+
+
+```solidity
+error InvalidLiquidatorThreshold();
+```
 
 ### IsolationDebtCapExceeded
-Thrown when attempting to exceed isolation debt cap
+Thrown when attempting to borrow beyond an isolated asset's debt cap
+
+*Isolated assets have maximum protocol-wide debt limits*
 
 
 ```solidity
-error IsolationDebtCapExceeded(address asset, uint256 requested, uint256 cap);
+error IsolationDebtCapExceeded();
 ```
 
-**Parameters**
+### CreditLimitExceeded
+Thrown when attempting to borrow or withdraw beyond a position's credit limit
 
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|The isolated asset address|
-|`requested`|`uint256`|The requested debt amount|
-|`cap`|`uint256`|The maximum allowed debt in isolation mode|
-
-### NoIsolatedCollateral
-Thrown when no collateral is provided for isolated asset
+*The operation would make the position undercollateralized*
 
 
 ```solidity
-error NoIsolatedCollateral(address user, uint256 positionId, address isolatedAsset);
+error CreditLimitExceeded();
 ```
 
-**Parameters**
+### NoDebt
+Thrown when attempting an operation that requires debt on a position with no debt
 
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the position|
-|`isolatedAsset`|`address`|The address of the isolated asset|
-
-### ExceedsCreditLimit
-Thrown when attempting to borrow beyond credit limit
+*Used in operations that require an active debt position*
 
 
 ```solidity
-error ExceedsCreditLimit(uint256 requested, uint256 creditLimit);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`requested`|`uint256`|The requested borrow amount|
-|`creditLimit`|`uint256`|The maximum allowed borrow amount|
-
-### NoDebtToRepay
-Thrown when attempting to repay a position with no debt
-
-
-```solidity
-error NoDebtToRepay(address user, uint256 positionId);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the position with no debt|
-
-### InvalidPositionAsset
-Thrown when asset doesn't match isolation mode settings
-
-
-```solidity
-error InvalidPositionAsset(address user, uint256 positionId, address requestedAsset, address isolatedAsset);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the position|
-|`requestedAsset`|`address`|The asset being added/withdrawn|
-|`isolatedAsset`|`address`|The current isolated asset|
-
-### InsufficientCollateralBalance
-Thrown when user has insufficient collateral in position
-
-
-```solidity
-error InsufficientCollateralBalance(
-    address user, uint256 positionId, address asset, uint256 requested, uint256 available
-);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the position|
-|`asset`|`address`|The address of the collateral asset|
-|`requested`|`uint256`|The requested withdrawal amount|
-|`available`|`uint256`|The actual available collateral|
-
-### WithdrawalExceedsCreditLimit
-Thrown when withdrawal would make position undercollateralized
-
-
-```solidity
-error WithdrawalExceedsCreditLimit(address user, uint256 positionId, uint256 debtAmount, uint256 creditLimit);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the position|
-|`debtAmount`|`uint256`|The position's current debt|
-|`creditLimit`|`uint256`|The position's new credit limit after withdrawal|
-
-### AssetDisabled
-Thrown when attempting to use a disabled asset
-
-
-```solidity
-error AssetDisabled(address asset);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|The address of the disabled asset|
-
-### IsolationModeRequired
-Thrown when attempting to use asset that requires isolation mode
-
-
-```solidity
-error IsolationModeRequired(address asset);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|The address of the asset that requires isolation|
-
-### SupplyCapExceeded
-Thrown when attempting to exceed asset supply cap
-
-
-```solidity
-error SupplyCapExceeded(address asset, uint256 requested, uint256 cap);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|The address of the asset|
-|`requested`|`uint256`|The requested supply amount|
-|`cap`|`uint256`|The maximum allowed supply|
-
-### OracleInvalidPrice
-Thrown when oracle returns invalid price data
-
-
-```solidity
-error OracleInvalidPrice(address oracle, int256 price);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`oracle`|`address`|The address of the price oracle|
-|`price`|`int256`|The invalid price value|
-
-### OracleStalePrice
-Thrown when oracle round is incomplete
-
-
-```solidity
-error OracleStalePrice(address oracle, uint80 roundId, uint80 answeredInRound);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`oracle`|`address`|The address of the price oracle|
-|`roundId`|`uint80`|The current round ID|
-|`answeredInRound`|`uint80`|The round when answer was computed|
-
-### OracleTimeout
-Thrown when oracle data is too old
-
-
-```solidity
-error OracleTimeout(address oracle, uint256 timestamp, uint256 currentTimestamp, uint256 maxAge);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`oracle`|`address`|The address of the price oracle|
-|`timestamp`|`uint256`|The timestamp of the oracle data|
-|`currentTimestamp`|`uint256`|The current block timestamp|
-|`maxAge`|`uint256`|The maximum allowed age for oracle data|
-
-### OracleInvalidPriceVolatility
-Thrown when price has excessive volatility with stale data
-
-
-```solidity
-error OracleInvalidPriceVolatility(address oracle, int256 price, uint256 volatility);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`oracle`|`address`|The address of the price oracle|
-|`price`|`int256`|The current price|
-|`volatility`|`uint256`|The calculated price change percentage|
-
-### TooManyAssets
-Thrown when trying to add more than 20 different assets to a position
-
-
-```solidity
-error TooManyAssets(address user, uint256 positionId);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|The position owner|
-|`positionId`|`uint256`|The position ID|
-
-### RewardTooHigh
-Thrown when trying to set a reward above maximum allowed
-
-
-```solidity
-error RewardTooHigh(uint256 requested, uint256 max);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`requested`|`uint256`|The requested rate|
-|`max`|`uint256`|The maximum allowed rate|
-
-### RewardIntervalTooShort
-Thrown when trying to set a reward interval below minimum allowed
-
-
-```solidity
-error RewardIntervalTooShort(uint256 requested, uint256 minimum);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`requested`|`uint256`|The requested interval in seconds|
-|`minimum`|`uint256`|The minimum allowed interval in seconds|
-
-### RewardableSupplyTooLow
-Thrown when trying to set rewardable supply below minimum allowed
-
-
-```solidity
-error RewardableSupplyTooLow(uint256 requested, uint256 minimum);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`requested`|`uint256`|The requested supply amount|
-|`minimum`|`uint256`|The minimum allowed supply amount|
-
-### LiquidatorThresholdTooLow
-Thrown when trying to set liquidator threshold below minimum allowed
-
-
-```solidity
-error LiquidatorThresholdTooLow(uint256 requested, uint256 minimum);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`requested`|`uint256`|The requested threshold amount|
-|`minimum`|`uint256`|The minimum allowed threshold amount|
-
-### RateTooHigh
-Thrown when trying to set a rate above maximum allowed
-
-
-```solidity
-error RateTooHigh(uint256 requested, uint256 maximum);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`requested`|`uint256`|The requested rate|
-|`maximum`|`uint256`|The maximum allowed rate|
-
-### RateTooLow
-Thrown when trying to set a rate below minimum allowed
-
-
-```solidity
-error RateTooLow(uint256 requested, uint256 minimum);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`requested`|`uint256`|The requested rate|
-|`minimum`|`uint256`|The minimum allowed rate|
-
-### InactivePosition
-Thrown when attempting to interact with an inactive position
-
-
-```solidity
-error InactivePosition(address user, uint256 positionId);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the inactive position|
-
-### OraclePriceDivergence
-Thrown when multiple oracles report widely divergent prices
-
-
-```solidity
-error OraclePriceDivergence(address asset, uint256 minPrice, uint256 maxPrice, uint256 threshold);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|The address of the asset|
-|`minPrice`|`uint256`|The lowest reported price|
-|`maxPrice`|`uint256`|The highest reported price|
-|`threshold`|`uint256`|The maximum allowed divergence|
-
-### CircuitBreakerTriggered
-Thrown when a circuit breaker has been triggered due to extreme price movements
-
-
-```solidity
-error CircuitBreakerTriggered(address asset, uint256 currentPrice, uint256 previousPrice, uint256 changePercent);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|The address of the asset|
-|`currentPrice`|`uint256`|The current price that triggered the circuit breaker|
-|`previousPrice`|`uint256`|The previous valid price|
-|`changePercent`|`uint256`|The percentage change that triggered the breaker|
-
-### IsolationModeForbidden
-Error thrown when an operation is not allowed in isolation mode
-
-*Used for operations restricted to cross-collateral positions*
-
-
-```solidity
-error IsolationModeForbidden();
+error NoDebt();
 ```
 
 ## Structs
-### Asset
-Configuration parameters for a collateral asset
-
-*Contains all settings that define how an asset behaves within the protocol*
-
-
-```solidity
-struct Asset {
-    uint8 active;
-    uint8 oracleDecimals;
-    uint8 decimals;
-    uint32 borrowThreshold;
-    uint32 liquidationThreshold;
-    address oracleUSD;
-    uint256 maxSupplyThreshold;
-    uint256 isolationDebtCap;
-    CollateralTier tier;
-}
-```
-
 ### UserPosition
 User borrowing position data
 
@@ -2374,44 +1413,7 @@ struct UserPosition {
 }
 ```
 
-### ProtocolSnapshot
-Global protocol state variables
-
-*Used for reporting and governance decisions*
-
-
-```solidity
-struct ProtocolSnapshot {
-    uint256 utilization;
-    uint256 borrowRate;
-    uint256 supplyRate;
-    uint256 totalBorrow;
-    uint256 totalSuppliedLiquidity;
-    uint256 targetReward;
-    uint256 rewardInterval;
-    uint256 rewardableSupply;
-    uint256 baseProfitTarget;
-    uint256 liquidatorThreshold;
-    uint256 flashLoanFee;
-}
-```
-
 ## Enums
-### CollateralTier
-Classification of collateral assets by risk profile
-
-*Used to determine borrowing parameters and liquidation thresholds*
-
-
-```solidity
-enum CollateralTier {
-    STABLE,
-    CROSS_A,
-    CROSS_B,
-    ISOLATED
-}
-```
-
 ### PositionStatus
 Current status of a borrowing position
 
