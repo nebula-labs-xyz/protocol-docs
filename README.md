@@ -1,4 +1,4 @@
-# Lendefi DAO
+# Lendefi Protocol
 
 ```
  *      ,,,          ,,     ,,,    ,,,      ,,   ,,,  ,,,      ,,,    ,,,   ,,,    ,,,   ,,,
