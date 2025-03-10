@@ -49,10 +49,10 @@ The contract demonstrates strong security practices:
 One of the contract's standout features is its sophisticated risk management framework:
 
 - **Multi-tier Collateral Classification**:
-  - STABLE: Lowest risk assets (5% liquidation bonus)
-  - CROSS_A: Low risk assets (8% liquidation bonus)
-  - CROSS_B: Medium risk assets (10% liquidation bonus)
-  - ISOLATED: High risk assets (15% liquidation bonus)
+  - STABLE: Lowest risk assets 
+  - CROSS_A: Low risk assets 
+  - CROSS_B: Medium risk assets 
+  - ISOLATED: High risk assets 
 
 - **Asset-Specific Parameters**:
   - Individual borrow thresholds
@@ -79,7 +79,7 @@ The protocol implements a sustainable economic model with multiple components:
    - Protocol fees based on profit target (typically 1%)
 
 3. **Liquidation Incentives**:
-   - Tier-based liquidation bonuses (5-15%)
+   - Tier-based liquidation fees (1-4%)
    - Governance token staking requirement (20,000 tokens minimum)
 
 4. **Liquidity Provider Rewards**:
