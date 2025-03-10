@@ -1,153 +1,184 @@
 # Lendefi
-[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/aaed57cb7ee1c677c0c943d32a39d9411c489fc9/contracts/lender/Lendefi.sol)
+[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/7882024792b94909a5d6c51ec494855406aaf294/contracts/lender/Lendefi.sol)
 
-# Security Review: Lendefi Protocol Contract
 
-## 1. Executive Summary
+# Lendefi Protocol Analysis Report
 
-The Lendefi Protocol is an ambitious, comprehensive lending and borrowing protocol that implements advanced DeFi features with a strong focus on security, risk management, and protocol governance. The contract demonstrates sophisticated design patterns, thorough security controls, and robust parameter management.
+## Executive Summary
 
-## 2. Contract Architecture
+The Lendefi Protocol is a sophisticated, monolithic lending platform implemented as an upgradeable smart contract system on Ethereum. It features a comprehensive risk management framework with tiered collateral classes, dynamic interest rates, isolated and cross-collateral positions, and robust liquidation mechanisms. The protocol is designed with extensive security controls including role-based access, reentrancy protection, and integration with price oracles.
 
-Lendefi operates as a monolithic lending protocol with the following key components:
+## Core Architecture
 
-1. **Core Lending Features**
-   - Lending/borrowing with tiered collateral system
-   - Position management (create/supply/withdraw/exit)
-   - Dynamic interest rate model based on utilization
-   - Flash loans with configurable fees
-   - Liquidation mechanism with tier-based bonuses
+Lendefi implements a multi-tiered lending platform where users can:
+- Supply liquidity to earn interest
+- Create multiple borrowing positions with varying risk profiles
+- Supply collateral and borrow against it
+- Perform flash loans
+- Manage positions through interpositional transfers
 
-2. **Architectural Patterns**
-   - UUPS upgradeable pattern
-   - Role-based access control
-   - Reentrancy protection
-   - Pausable operations
-   - Oracle integration
+The contract leverages several OpenZeppelin patterns including:
+- PausableUpgradeable for the core
+- UUPSUpgradeable for upgradability
+- AccessControlUpgradeable for role-based permissions
+- ReentrancyGuardUpgradeable for security
 
-3. **Risk Tiering System**
-   - STABLE: Low-risk assets (5% liquidation bonus)
-   - CROSS_A: Low-medium risk (8% liquidation bonus)
-   - CROSS_B: Medium risk (10% liquidation bonus)
-   - ISOLATED: High risk (15% liquidation bonus)
+## Collateral Management System
 
-## 3. Strengths
+### Collateral Tiers
 
-### 3.1 Security Focus
-- Comprehensive access control via well-defined roles
-- Consistent use of nonReentrant modifiers
-- Pausable functionality for emergency situations
-- Oracle safety checks including staleness, volatility, and round completion
-- Following checks-effects-interactions pattern
+One of Lendefi's distinguishing features is its four-tiered collateral system:
 
-### 3.2 Risk Management
-- Tiered collateral system with appropriate risk parameters
-- Isolation mode for higher-risk assets
-- Supply caps to limit protocol exposure
-- Advanced liquidation mechanics with governance token requirements
-- Dynamic interest rates adjusted by utilization
+1. **STABLE**: Lowest risk assets (stablecoins) with 90% borrow threshold and 95% liquidation threshold
+2. **CROSS_A**: Low risk assets with 80% borrow threshold and 85% liquidation threshold
+3. **CROSS_B**: Medium risk assets with 70% borrow threshold and 80% liquidation threshold
+4. **ISOLATED**: High risk assets with 65% borrow threshold and 75% liquidation threshold
 
-### 3.3 Design Quality
-- Excellent documentation with detailed NatSpec comments
-- Custom errors with descriptive messages instead of require statements
-- Proper event emissions for off-chain monitoring
-- Consistent state validation through modifiers
-- Thoughtful protocol parameter management
+Each tier has associated parameters determining:
+- Interest rate premiums
+- Liquidation fees
+- Collateralization requirements
 
-## 4. Concerns and Recommendations
+### Position Types
 
-### 4.1 High Complexity
-**Issue**: The contract is extraordinarily large and complex, implementing many features in a single contract.
+Users can create two types of borrowing positions:
 
-**Recommendation**: Consider splitting functionality into more specialized contracts following a modular design pattern. Particularly, separate core lending logic from LP token functionality and flash loans.
+1. **Cross-Collateral Positions**:
+   - Can hold up to 20 different collateral assets
+   - Assets from multiple tiers can be combined
+   - Borrow rates determined by highest risk tier present
+   - More capital efficient but potentially higher risk
 
-### 4.2 Liquidation Mechanics
-**Issue**: The contract implements full liquidation rather than partial liquidation, which can lead to larger market impacts and less capital efficiency.
+2. **Isolated Positions**:
+   - Limited to a single collateral asset
+   - Subject to debt caps specific to the asset
+   - Higher interest rates but contained risk
+   - Designed for riskier assets to prevent systemic risk
 
-**Recommendation**: Consider implementing partial liquidations where liquidators can choose to repay a portion of the debt.
+## Interest Rate Model
 
-### 4.3 Oracle Dependencies
-**Issue**: While the contract includes excellent oracle safety checks, it still relies heavily on Chainlink oracles.
+The protocol implements a sophisticated, dynamic interest rate model:
 
-**Recommendation**: Consider implementing a fallback oracle system or a time-weighted average price (TWAP) mechanism as backup.
+- Base rate (**baseBorrowRate**) serves as the minimum (default: 6%)
+- Tier-specific premiums based on collateral risk (5-15%)
+- Utilization-sensitive scaling that increases rates as utilization rises
+- Supply rates calculated dynamically based on borrow rates and utilization
+- Interest accrues continuously and is calculated when positions are modified
 
-### 4.4 Gas Optimization
-**Issue**: Some operations like `getHighestTier()` and asset array iterations could be gas-intensive.
+## Liquidity Provider Mechanism
 
-**Recommendation**: Optimize gas usage, particularly in loops over assets, and consider caching frequently accessed values.
+Liquidity providers receive "LYT" (Lendefi Yield Token) which:
+- Represents a proportional share of the lending pool
+- Appreciates in value as interest accrues
+- Can be redeemed for the original deposit plus earned interest
+- May qualify for additional protocol rewards
 
-### 4.5 Limited Flash Loan Support
-**Issue**: Flash loans are restricted to USDC only, limiting utility.
+The rewards system includes:
+- Time-based rewards for long-term liquidity providers
+- Minimum supply thresholds for reward eligibility
+- Configurable reward amounts and intervals
 
-**Recommendation**: Consider expanding flash loan capabilities to other stable assets or implementing a more generalized flash loan system.
+## Risk Management
 
-## 5. Specific Function Analysis
+### Health Factor System
 
-### 5.1 `supplyLiquidity`
-- Well-implemented exchange rate calculation based on pool state
-- Correctly handles the special case of empty pools
+The protocol uses a health factor system to monitor position risk:
+- Health factor = (collateral value * liquidation threshold) / debt
+- Health factor < 1.0 triggers liquidation eligibility
+- Different assets contribute differently to the health factor based on their risk tier
 
-### 5.2 `healthFactor`
-- Thorough implementation of health calculation
-- Good handling of zero-debt edge case with max uint return
+### Liquidation Process
 
-### 5.3 `getAssetPriceOracle`
-- Outstanding implementation with multiple safety checks:
-  - Price positivity verification
-  - Round completion check
-  - Timestamp freshness validation
-  - Volatility monitoring with extra requirements for large price movements
+The liquidation mechanism includes:
+- Requirement for liquidators to hold minimum governance tokens
+- Tier-specific liquidation bonuses (5-15%)
+- Complete collateral transfer to liquidator in exchange for debt repayment
+- Differential pricing between borrow and liquidation thresholds creates a safety buffer
 
-### 5.4 `liquidate`
-- Proper verification of liquidator eligibility via governance token holdings
-- Appropriate calculation of liquidation bonuses based on risk tiers
-- Efficient transfer of all collateral to liquidator
+## Protocol Administration
 
-### 5.5 `flashLoan`
-- Clear validation of funds return with fees
-- Appropriate event emissions
-- Limited to USDC to reduce complexity
+The system implements role-based access control with four key roles:
+1. **DEFAULT_ADMIN_ROLE**: Overall administrative control
+2. **PAUSER_ROLE**: Emergency protocol pause/unpause capabilities
+3. **MANAGER_ROLE**: Parameter adjustments and configuration changes
+4. **UPGRADER_ROLE**: Contract upgrade permissions
 
-## 6. Economic Security
+## Advanced Features
 
-### 6.1 Interest Rate Model
-The protocol implements a sophisticated interest rate model that:
-- Scales with utilization
-- Includes tier-specific premiums
-- Considers break-even rates based on supply interest
-- Maintains a profit target for protocol sustainability
+### Flash Loans
 
-### 6.2 Liquidity Provider Incentives
-- LP token (LYT) represents shares of the lending pool
-- Dynamic exchange rate based on protocol performance
-- Reward mechanism for long-term liquidity providers
+The protocol offers flash loans with:
+- Configurable fees (default: 9 basis points)
+- Support for callbacks to borrower contracts
+- Validation of return funds plus fees
+- Fee accrual to protocol treasury
 
-## 7. Governance and Parameter Management
+### Interpositional Transfers
 
-The protocol has well-designed parameter management:
-- Clear constraints on parameter values (min/max checks)
-- Role-based permissions for parameter updates
-- Transparent upgrade process with version tracking
-- Timelock integration for governance actions
+A gas-optimized feature allowing users to move collateral between their positions:
+- No token transfers occur (purely accounting changes)
+- Subject to the same risk checks as withdrawals/deposits
+- Not available for isolated positions
+- Enforces maximum asset limits per position
 
-## 8. Conclusion
+### Oracle Integration
 
-The Lendefi Protocol demonstrates professional-grade implementation with substantial attention to security details, risk management, and protocol economics. The contract follows Solidity best practices and incorporates numerous safeguards against common vulnerabilities.
+The protocol integrates with Chainlink price oracles:
+- Support for multiple oracles per asset
+- Median price calculation for robust pricing
+- Freshness thresholds for price data
+- Special handling for volatile assets
+- Tiered oracle fallback system
 
-While the protocol's complexity presents inherent risks, these are largely mitigated through careful validation, access controls, and parameter constraints. The most significant improvements would come from modularizing the codebase and implementing partial liquidations.
+## Technical Safeguards
 
-Overall, this is a sophisticated lending protocol with robust security measures and thoughtful economic design that positions it well for responsible operation in the DeFi ecosystem.
+Several security mechanisms are implemented:
+- Comprehensive input validation
+- Reentrancy guards on all state-modifying functions
+- Circuit breaker (pause) functionality
+- Supply caps per asset
+- Debt caps for isolated assets
+- Maximum asset limit per position
+- Minimum/maximum parameter constraints
 
+## Protocol Metrics and Transparency
+
+The protocol provides extensive on-chain metrics:
+- Current utilization rate
+- Total borrow and supply amounts
+- Interest accrual tracking
+- Position health factors
+- Asset TVL (Total Value Locked)
+- Individual position summaries
+- Collateral valuations
+
+## Conclusion
+
+Lendefi represents a sophisticated lending protocol with advanced risk management features, particularly through its tiered collateral system and position isolation capabilities. The modular architecture, upgradability pattern, and comprehensive security controls demonstrate attention to both functionality and security considerations.
+
+The combination of cross-collateral and isolated positions provides flexibility while containing systemic risks, making it suitable for both conservative and more risk-tolerant users. The dynamic interest rate model balances capital efficiency with protocol solvency requirements.
 
 **Inherits:**
-[IPROTOCOL](/contracts/interfaces/IProtocol.sol/interface.IPROTOCOL.md), ERC20Upgradeable, ERC20PausableUpgradeable, AccessControlUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable, [YodaMath](/contracts/lender/lib/YodaMath.sol/contract.YodaMath.md)
+[IPROTOCOL](/contracts/interfaces/IProtocol.sol/interface.IPROTOCOL.md), PausableUpgradeable, AccessControlUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable
 
 **Author:**
 alexei@nebula-labs(dot)xyz
 
-
 ## State Variables
+### WAD
+*Utility for set operations on address collections*
+
+*Standard decimals for percentage calculations (1e6 = 100%)*
+
+
+```solidity
+uint256 internal constant WAD = 1e6;
+```
+
+
 ### PAUSER_ROLE
+*Role identifier for users authorized to pause/unpause the protocol*
+
 
 ```solidity
 bytes32 internal constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
@@ -155,6 +186,8 @@ bytes32 internal constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
 
 ### MANAGER_ROLE
+*Role identifier for users authorized to manage protocol parameters*
+
 
 ```solidity
 bytes32 internal constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
@@ -162,6 +195,8 @@ bytes32 internal constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
 
 
 ### UPGRADER_ROLE
+*Role identifier for users authorized to upgrade the contract*
+
 
 ```solidity
 bytes32 internal constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
@@ -169,7 +204,7 @@ bytes32 internal constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
 
 
 ### usdcInstance
-*USDC token instance*
+*Reference to the USDC stablecoin contract used for lending/borrowing*
 
 
 ```solidity
@@ -178,7 +213,7 @@ IERC20 internal usdcInstance;
 
 
 ### tokenInstance
-*governance token instance*
+*Reference to the protocol's governance token contract*
 
 
 ```solidity
@@ -187,7 +222,7 @@ IERC20 internal tokenInstance;
 
 
 ### ecosystemInstance
-*ecosystem contract instance*
+*Reference to the ecosystem contract for managing rewards*
 
 
 ```solidity
@@ -195,26 +230,26 @@ IECOSYSTEM internal ecosystemInstance;
 ```
 
 
-### oracleModule
-*Oracle module for secure price feeds*
+### yieldTokenInstance
+*Reference to the yield token (LP token) contract*
 
 
 ```solidity
-LendefiOracle internal oracleModule;
+ILendefiYieldToken internal yieldTokenInstance;
 ```
 
 
-### listedAsset
+### assetsModule
+*Reference to the assets module for collateral management*
+
 
 ```solidity
-EnumerableSet.AddressSet internal listedAsset;
+ILendefiAssets internal assetsModule;
 ```
 
 
 ### totalBorrow
-Total amount of USDC borrowed from the protocol
-
-*Tracks the sum of all active borrowing positions' principal*
+Total amount borrowed from the protocol (in USDC)
 
 
 ```solidity
@@ -223,9 +258,7 @@ uint256 public totalBorrow;
 
 
 ### totalSuppliedLiquidity
-Total liquidity supplied to the protocol by liquidity providers
-
-*Denominated in USDC with 6 decimals, used for utilization calculations*
+Total liquidity supplied to the protocol (in USDC)
 
 
 ```solidity
@@ -234,9 +267,7 @@ uint256 public totalSuppliedLiquidity;
 
 
 ### totalAccruedBorrowerInterest
-Total interest paid by borrowers over the protocol's lifetime
-
-*Accumulated separately from principal for accounting purposes*
+Cumulative interest accrued by borrowers since protocol inception
 
 
 ```solidity
@@ -245,9 +276,7 @@ uint256 public totalAccruedBorrowerInterest;
 
 
 ### totalAccruedSupplierInterest
-Total interest earned by liquidity providers
-
-*Includes all interest distributed to LPs since protocol inception*
+Cumulative interest earned by suppliers since protocol inception
 
 
 ```solidity
@@ -255,21 +284,8 @@ uint256 public totalAccruedSupplierInterest;
 ```
 
 
-### withdrawnLiquidity
-Total liquidity withdrawn from the protocol
-
-*Cumulative tracking of all withdrawals, used for analytics*
-
-
-```solidity
-uint256 public withdrawnLiquidity;
-```
-
-
 ### targetReward
-Target reward amount for eligible liquidity providers
-
-*Maximum reward amount achievable over a full reward interval*
+Target amount of governance tokens for LP rewards per interval
 
 
 ```solidity
@@ -278,9 +294,7 @@ uint256 public targetReward;
 
 
 ### rewardInterval
-Time interval for calculating rewards (in seconds)
-
-*Typically set to 180 days, used as denominator in reward calculations*
+Time period for LP reward eligibility in seconds
 
 
 ```solidity
@@ -289,9 +303,7 @@ uint256 public rewardInterval;
 
 
 ### rewardableSupply
-Minimum supply required to be eligible for rewards
-
-*Users must supply at least this amount to qualify for ecosystem rewards*
+Minimum supply amount required for reward eligibility (in USDC)
 
 
 ```solidity
@@ -300,9 +312,7 @@ uint256 public rewardableSupply;
 
 
 ### baseBorrowRate
-Base interest rate applied to all loans
-
-*Expressed in parts per million (e.g., 0.06e6 = 6%)*
+Base annual interest rate for borrowing (in WAD format)
 
 
 ```solidity
@@ -311,9 +321,7 @@ uint256 public baseBorrowRate;
 
 
 ### baseProfitTarget
-Target profit margin for the protocol
-
-*Used to calculate fees and maintain protocol sustainability*
+Target profit rate for the protocol (in WAD format)
 
 
 ```solidity
@@ -322,9 +330,7 @@ uint256 public baseProfitTarget;
 
 
 ### liquidatorThreshold
-Minimum governance tokens required to perform liquidations
-
-*Ensures liquidators have skin in the game by requiring token holdings*
+Minimum governance token balance required to perform liquidations
 
 
 ```solidity
@@ -333,9 +339,7 @@ uint256 public liquidatorThreshold;
 
 
 ### flashLoanFee
-Fee charged for flash loans in basis points
-
-*9 basis points = 0.09%, maximum allowed is 100 (1%)*
+Fee percentage charged for flash loans (in basis points)
 
 
 ```solidity
@@ -344,9 +348,7 @@ uint256 public flashLoanFee;
 
 
 ### totalFlashLoanFees
-Total fees collected from flash loans
-
-*Accumulated since inception, part of protocol revenue*
+Total fees collected from flash loans since protocol inception
 
 
 ```solidity
@@ -355,9 +357,7 @@ uint256 public totalFlashLoanFees;
 
 
 ### version
-Current contract version, incremented on upgrades
-
-*Used to track implementation versions for transparent upgrades*
+Current contract implementation version
 
 
 ```solidity
@@ -368,62 +368,14 @@ uint8 public version;
 ### treasury
 Address of the treasury that receives protocol fees
 
-*Fees are sent here for protocol sustainability and governance*
-
 
 ```solidity
 address public treasury;
 ```
 
 
-### assetInfo
-Asset configuration details for supported collateral types
-
-*Maps asset address to its full configuration struct*
-
-
-```solidity
-mapping(address => Asset) internal assetInfo;
-```
-
-
-### positions
-User borrowing positions by address
-
-*Maps user address to an array of all their positions*
-
-
-```solidity
-mapping(address => UserPosition[]) internal positions;
-```
-
-
-### positionCollateralAmounts
-Collateral amounts by position and asset
-
-*Maps user address, position ID, and asset address to collateral amount*
-
-
-```solidity
-mapping(address => mapping(uint256 => mapping(address => uint256))) internal positionCollateralAmounts;
-```
-
-
-### positionCollateralAssets
-List of assets used as collateral in each position
-
-*Maps user address and position ID to array of collateral asset addresses*
-
-
-```solidity
-mapping(address => mapping(uint256 => EnumerableSet.AddressSet)) internal positionCollateralAssets;
-```
-
-
 ### assetTVL
-Total value locked of each supported asset
-
-*Tracks how much of each asset is held by the protocol*
+Total value locked per asset
 
 
 ```solidity
@@ -431,32 +383,32 @@ mapping(address => uint256) public assetTVL;
 ```
 
 
-### tierJumpRate
-Base borrow rate for each collateral risk tier
+### positions
+*Stores all borrowing positions for each user*
 
-*Higher tiers have higher interest rates due to increased risk*
+*Key: User address, Value: Array of positions*
 
 
 ```solidity
-mapping(CollateralTier => uint256) internal tierJumpRate;
+mapping(address => UserPosition[]) internal positions;
 ```
 
 
-### tierLiquidationFee
-Liquidation bonus percentage for each collateral tier
+### positionCollateral
+*Tracks collateral amounts for each asset in each position*
 
-*Higher risk tiers have larger liquidation bonuses*
+*Keys: User address, Position ID, Asset address, Value: Amount*
 
 
 ```solidity
-mapping(CollateralTier => uint256) internal tierLiquidationFee;
+mapping(address => mapping(uint256 => EnumerableMap.AddressToUintMap)) internal positionCollateral;
 ```
 
 
 ### liquidityAccrueTimeIndex
-Timestamp of last reward accrual for each liquidity provider
+*Tracks the last time rewards were accrued for each liquidity provider*
 
-*Used to calculate eligible rewards based on time elapsed*
+*Key: User address, Value: Timestamp of last accrual*
 
 
 ```solidity
@@ -465,21 +417,18 @@ mapping(address src => uint256 time) internal liquidityAccrueTimeIndex;
 
 
 ### __gap
+*Reserved storage gap for future upgrades*
+
 
 ```solidity
-uint256[50] private __gap;
+uint256[20] private __gap;
 ```
 
 
 ## Functions
 ### validPosition
 
-Validates that the provided position ID exists for the specified user
-
-*Reverts with InvalidPosition error if the position ID exceeds the user's positions array length*
-
-**Note:**
-security: Position IDs are zero-indexed and must be less than the total number of positions
+*Ensures the position exists for the given user*
 
 
 ```solidity
@@ -489,20 +438,13 @@ modifier validPosition(address user, uint256 positionId);
 
 |Name|Type|Description|
 |----|----|-----------|
-|`user`|`address`|The address of the user who owns the position|
-|`positionId`|`uint256`|The ID of the position to validate|
+|`user`|`address`|Address of the position owner|
+|`positionId`|`uint256`|ID of the position to check|
 
 
 ### activePosition
 
-Validates that the given position is in ACTIVE status
-
-*Reverts with InactivePosition error if the position status is not ACTIVE*
-
-**Notes:**
-- security: This ensures operations are only performed on active positions
-
-- error: InactivePosition if position has been CLOSED or LIQUIDATED
+*Ensures the position exists and is in active status*
 
 
 ```solidity
@@ -512,15 +454,13 @@ modifier activePosition(address user, uint256 positionId);
 
 |Name|Type|Description|
 |----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the position to validate|
+|`user`|`address`|Address of the position owner|
+|`positionId`|`uint256`|ID of the position to check|
 
 
 ### validAsset
 
-Validates that the asset is listed in the protocol
-
-*Reverts with AssetNotListed error if the asset is not in the listedAsset set*
+*Ensures the asset is whitelisted in the protocol*
 
 
 ```solidity
@@ -530,7 +470,22 @@ modifier validAsset(address asset);
 
 |Name|Type|Description|
 |----|----|-----------|
-|`asset`|`address`|The address of the asset to validate|
+|`asset`|`address`|Address of the asset to validate|
+
+
+### validAmount
+
+*Ensures the amount is greater than zero*
+
+
+```solidity
+modifier validAmount(uint256 amount);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`amount`|`uint256`|The amount to check|
 
 
 ### constructor
@@ -545,13 +500,14 @@ constructor();
 
 ### initialize
 
-Initializes the contract with core dependencies and parameters
+Initializes the Lendefi protocol with core contract references and default parameters
 
-*Sets up ERC20 token details, access control roles, and default protocol parameters
-including interest rates and liquidation bonuses for each collateral tier*
+*Sets up roles, connects to external contracts, and initializes protocol parameters*
 
-**Note:**
-oz-upgrades-unsafe: initializer is used instead of constructor for proxy pattern
+**Notes:**
+- access-control: Can only be called once during deployment
+
+- events: Emits an Initialized event
 
 
 ```solidity
@@ -561,35 +517,35 @@ function initialize(
     address ecosystem,
     address treasury_,
     address timelock_,
-    address guardian,
-    address oracle_
+    address yieldToken,
+    address assetsModule_,
+    address guardian
 ) external initializer;
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`usdc`|`address`|The address of the USDC stablecoin used for borrowing and liquidity|
-|`govToken`|`address`|The address of the governance token used for liquidator eligibility|
-|`ecosystem`|`address`|The address of the ecosystem contract that manages rewards|
-|`treasury_`|`address`|The address of the treasury that collects protocol fees|
-|`timelock_`|`address`|The address of the timelock contract for governance actions|
-|`guardian`|`address`|The address of the initial admin with pausing capability|
-|`oracle_`|`address`|The address of the oracle module for price feeds|
+|`usdc`|`address`|Address of the USDC token contract used for lending and borrowing|
+|`govToken`|`address`|Address of the governance token contract used for protocol governance|
+|`ecosystem`|`address`|Address of the ecosystem contract for managing rewards|
+|`treasury_`|`address`|Address of the treasury for collecting protocol fees|
+|`timelock_`|`address`|Address of the timelock contract for governance actions|
+|`yieldToken`|`address`|Address of the yield token (LP token) contract|
+|`assetsModule_`|`address`|Address of the assets module for managing supported collateral|
+|`guardian`|`address`|Address of the protocol guardian with emergency powers|
 
 
 ### pause
 
-Pauses all protocol operations in case of emergency
+Pauses the protocol in an emergency situation
 
-*Can only be called by accounts with PAUSER_ROLE*
+*When paused, all state-changing functions will revert*
 
 **Notes:**
-- security: This is a critical emergency function that should be carefully controlled
+- access-control: Restricted to PAUSER_ROLE
 
-- access: Restricted to PAUSER_ROLE
-
-- events: Emits a Paused event from ERC20Pausable
+- events: Emits a Paused event from PausableUpgradeable
 
 
 ```solidity
@@ -598,16 +554,14 @@ function pause() external override onlyRole(PAUSER_ROLE);
 
 ### unpause
 
-Unpauses protocol operations, returning to normal functioning
+Unpauses the protocol after an emergency is resolved
 
-*Can only be called by accounts with PAUSER_ROLE*
+*Restores full functionality to all state-changing functions*
 
 **Notes:**
-- security: Should only be called after thorough security verification
+- access-control: Restricted to PAUSER_ROLE
 
-- access: Restricted to PAUSER_ROLE
-
-- events: Emits an Unpaused event from ERC20Pausable
+- events: Emits an Unpaused event from PausableUpgradeable
 
 
 ```solidity
@@ -616,25 +570,47 @@ function unpause() external override onlyRole(PAUSER_ROLE);
 
 ### flashLoan
 
-Executes a flash loan of USDC tokens
+Executes a flash loan of USDC to the specified receiver
 
-*This function enables atomic flash loans with the following flow:
-1. Checks token is USDC and sufficient liquidity exists
-2. Transfers tokens to receiver
-3. Calls receiver's executeOperation function
-4. Verifies funds are returned with fee*
+*This function facilitates uncollateralized loans that must be repaid within the same transaction:
+1. Validates available protocol liquidity
+2. Calculates flash loan fee
+3. Transfers requested amount to receiver
+4. Calls receiver's executeOperation function
+5. Verifies loan repayment plus fee
+6. Updates protocol fee accounting
+The receiver contract must implement IFlashLoanReceiver interface and handle the loan
+in its executeOperation function. The loan plus fee must be repaid before the
+transaction completes.*
 
 **Notes:**
-- security: Non-reentrant and pausable to prevent attack vectors
+- requirements: 
+- Protocol must not be paused
+- Amount must not exceed protocol's available liquidity
+- Receiver must implement IFlashLoanReceiver interface
+- Loan plus fee must be repaid within the same transaction
 
-- fee: Flash loan fee is configurable, default 9 basis points (0.09%)
+- state-changes: 
+- Temporarily reduces protocol USDC balance by amount
+- Increases totalFlashLoanFees by the fee amount after repayment
+- Final protocol USDC balance increases by fee amount
 
-- events: Emits FlashLoan event with loan details and fee
+- emits: 
+- FlashLoan(msg.sender, receiver, address(usdcInstance), amount, fee)
+
+- access-control: Available to any caller when protocol is not paused
+
+- error-cases: 
+- LowLiquidity: Thrown when amount exceeds available protocol liquidity
+- FlashLoanFailed: Thrown when executeOperation returns false
+- RepaymentFailed: Thrown when final balance is less than required amount
+- ZeroAmount: Thrown when trying to borrow zero amount
 
 
 ```solidity
-function flashLoan(address receiver, address token, uint256 amount, bytes calldata params)
+function flashLoan(address receiver, uint256 amount, bytes calldata params)
     external
+    validAmount(amount)
     nonReentrant
     whenNotPaused;
 ```
@@ -642,24 +618,24 @@ function flashLoan(address receiver, address token, uint256 amount, bytes callda
 
 |Name|Type|Description|
 |----|----|-----------|
-|`receiver`|`address`|Address of the contract receiving the flash loan|
-|`token`|`address`|Token to be flash loaned (must be USDC)|
-|`amount`|`uint256`|Amount of tokens to flash loan|
-|`params`|`bytes`|Arbitrary data to be passed to the receiver's executeOperation function|
+|`receiver`|`address`|Address of the contract receiving and handling the flash loan|
+|`amount`|`uint256`|Amount of USDC to borrow|
+|`params`|`bytes`|Arbitrary data to pass to the receiver for execution context|
 
 
 ### updateFlashLoanFee
 
-Updates the flash loan fee percentage
+Updates the fee percentage charged for flash loans
 
-*Can only be called by accounts with MANAGER_ROLE*
+*Fee is expressed in basis points (e.g., 10 = 0.1%)*
 
 **Notes:**
-- security: Maximum fee is capped at 100 basis points (1%) to protect users
+- access-control: Restricted to MANAGER_ROLE
 
-- access: Restricted to MANAGER_ROLE
+- events: Emits an UpdateFlashLoanFee event
 
-- events: Emits UpdateFlashLoanFee event with new fee value
+- error-cases: 
+- InvalidFee: Thrown when fee exceeds the maximum allowed (100 basis points)
 
 
 ```solidity
@@ -669,170 +645,165 @@ function updateFlashLoanFee(uint256 newFee) external onlyRole(MANAGER_ROLE);
 
 |Name|Type|Description|
 |----|----|-----------|
-|`newFee`|`uint256`|The new fee in basis points (1 = 0.01%)|
+|`newFee`|`uint256`|New flash loan fee in basis points, capped at 1% (100 basis points)|
 
 
 ### supplyLiquidity
 
-Allows users to supply USDC liquidity to the protocol in exchange for LYT tokens
+Supplies USDC liquidity to the lending pool
 
-*Mints LYT tokens representing share of the lending pool based on current exchange rate*
+*This function handles the process of supplying liquidity to the protocol:
+1. Calculating the appropriate amount of yield tokens to mint based on current exchange rate
+2. Updating the protocol's total supplied liquidity accounting
+3. Recording the timestamp for reward calculation purposes
+4. Minting yield tokens to the supplier
+5. Transferring USDC from the supplier to the protocol
+The yield token amount (value) is calculated differently based on protocol state:
+- Normal operation: (amount * existing_yield_token_supply) / total_protocol_assets
+- Initial supply or zero utilization: value equals amount (1:1 ratio)
+This ensures that early suppliers don't get diluted and later suppliers receive
+tokens proportional to the current asset-to-yield-token ratio.*
 
 **Notes:**
-- security: Non-reentrant to prevent reentrancy attacks
+- requirements: 
+- Protocol must not be paused
+- Caller must have approved sufficient USDC to the protocol
 
-- validation: Checks:
-- User has sufficient USDC balance
+- state-changes: 
+- Increases totalSuppliedLiquidity by amount
+- Sets liquidityAccrueTimeIndex[msg.sender] to current timestamp
+- Mints yield tokens to msg.sender based on calculated exchange rate
+- Transfers USDC from msg.sender to the protocol
 
-- calculations: 
-- If pool is empty: 1:1 mint ratio
-- Otherwise: amount * totalSupply / totalAssets
-- Special case for 0 utilization: 1:1 mint ratio
+- emits: 
+- SupplyLiquidity(msg.sender, amount)
 
-- state: Updates:
-- Increases totalSuppliedLiquidity
-- Updates liquidityAccrueTimeIndex for rewards
-- Mints LYT tokens to supplier
+- access-control: Available to any caller when protocol is not paused
 
-- events: Emits:
-- SupplyLiquidity with supplier address and amount
+- error-codes: 
+- Reverts if protocol is paused (from whenNotPaused modifier)
+- Reverts on reentrancy (from nonReentrant modifier)
+- Reverts if USDC transfer fails
 
 
 ```solidity
-function supplyLiquidity(uint256 amount) external nonReentrant;
+function supplyLiquidity(uint256 amount) external validAmount(amount) nonReentrant whenNotPaused;
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`amount`|`uint256`|The amount of USDC to supply (in USDC decimals - 6)|
+|`amount`|`uint256`|Amount of USDC to supply to the protocol|
 
 
 ### exchange
 
-Allows users to exchange LYT tokens for underlying USDC with accrued interest
+Exchanges yield tokens for USDC, withdrawing liquidity from the protocol
 
-*Calculates redemption value based on current pool state and profit target*
-
-**Notes:**
-- security: Non-reentrant to prevent reentrancy attacks
-
-- validation: Checks:
-- User has sufficient LYT token balance
-
-- calculations: 
-- Base amount = (amount * totalSuppliedLiquidity) / totalSupply
-- Protocol fee = baseAmount * baseProfitTarget if profitable
-- Redemption value = (amount * (USDC balance + totalBorrow)) / totalSupply
-
-- state: Updates:
-- Decreases totalSuppliedLiquidity
-- Updates withdrawnLiquidity
-- Updates totalAccruedSupplierInterest
-- Burns user's LYT tokens
-- Mints fee to treasury if profitable
-
-- events: Emits:
-- Exchange with sender address, LYT amount, and USDC value
-
-
-```solidity
-function exchange(uint256 amount) external nonReentrant;
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`amount`|`uint256`|The amount of LYT tokens to exchange|
-
-
-### supplyCollateral
-
-Allows users to supply collateral assets to a borrowing position
-
-*Handles both isolated and cross-collateral positions with appropriate validations*
+*This function handles the withdrawal of liquidity from the protocol, which includes:
+1. Calculating the user's proportional share of the total protocol assets
+2. Potentially taking protocol profit to the treasury
+3. Updating protocol liquidity and interest accounting
+4. Processing rewards if the user is eligible
+5. Burning the yield tokens
+6. Transferring USDC to the user
+The redemption value is based on the current exchange rate determined by:
+- Total protocol assets (USDC on hand + outstanding loans)
+- Total yield token supply
+This ensures users receive their proportional share of interest earned since deposit.
+If the protocol has exceeded its profit target, a portion of the withdrawal amount
+is minted as yield tokens to the treasury before calculating the user's redemption value.*
 
 **Notes:**
-- security: Non-reentrant and pausable to prevent attack vectors
+- requirements: 
+- Protocol must not be paused
+- Caller must have sufficient yield tokens
+- Protocol must have sufficient USDC to fulfill the withdrawal
 
-- validation: Checks:
-- Asset is listed and active
-- Position exists
-- Isolation mode constraints
-- Supply cap limits
-- Maximum assets per position (20)
+- state-changes: 
+- Decreases totalSuppliedLiquidity by the base amount of the withdrawal
+- Increases totalAccruedSupplierInterest by any interest earned
+- Burns yield tokens from the caller
+- Potentially mints yield tokens to the treasury (profit target)
+- May reset the caller's liquidityAccrueTimeIndex if rewards are processed
 
-- events: Emits:
-- TVLUpdated with new total value locked
-- SupplyCollateral with supply details
+- emits: 
+- Exchange(msg.sender, amount, value) for the exchange operation
+- Reward(msg.sender, rewardAmount) if rewards are issued
+
+- access-control: Available to any caller when protocol is not paused
+
+- error-cases: 
+- ZeroAmount: Thrown when amount is zero
 
 
 ```solidity
-function supplyCollateral(address asset, uint256 amount, uint256 positionId)
-    external
-    activePosition(msg.sender, positionId)
-    validAsset(asset)
-    nonReentrant
-    whenNotPaused;
+function exchange(uint256 amount) external validAmount(amount) nonReentrant whenNotPaused;
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`asset`|`address`|The address of the collateral asset to supply|
-|`amount`|`uint256`|The amount of the asset to supply|
-|`positionId`|`uint256`|The ID of the position to supply collateral to|
+|`amount`|`uint256`|Amount of yield tokens to exchange for underlying USDC|
 
 
-### withdrawCollateral
+### claimReward
 
-Allows users to withdraw collateral assets from their borrowing position
+Claims accumulated rewards for eligible liquidity providers
 
-*Process:
-1. Validates position is active
-2. Validates isolation mode constraints
-3. Checks sufficient collateral balance
-4. Updates collateral state
-5. Verifies remaining collateral supports existing debt
-6. Removes asset from position if fully withdrawn*
+*Calculates time-based rewards and transfers them to the caller if eligible*
 
-**Note:**
-security: Non-reentrant and pausable to prevent attack vectors
+**Notes:**
+- requirements: 
+- Caller must have sufficient time since last claim (>= rewardInterval)
+- Caller must have supplied minimum amount (>= rewardableSupply)
+
+- state-changes: 
+- Resets liquidityAccrueTimeIndex[msg.sender] if rewards are claimed
+
+- emits: 
+- Reward(msg.sender, rewardAmount) if rewards are issued
+
+- access-control: Available to any caller when protocol is not paused
 
 
 ```solidity
-function withdrawCollateral(address asset, uint256 amount, uint256 positionId)
-    external
-    activePosition(msg.sender, positionId)
-    nonReentrant
-    whenNotPaused;
+function claimReward() external nonReentrant whenNotPaused returns (uint256 finalReward);
 ```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|The address of the collateral asset to withdraw|
-|`amount`|`uint256`|The amount of the asset to withdraw|
-|`positionId`|`uint256`|The ID of the position to withdraw from|
-
 
 ### createPosition
 
-Creates a new borrowing position for the caller
+Creates a new borrowing position with specified isolation mode
 
-*Creates a new position and optionally enables isolation mode with the specified asset*
+*This function initializes a new borrowing position for the caller.
+Two types of positions can be created:
+1. Isolated positions: Limited to one specific collateral asset
+2. Cross-collateral positions: Can use multiple asset types as collateral
+For isolated positions, the asset parameter is immediately registered as the position's
+collateral asset. For cross-collateral positions, no asset is registered initially;
+assets must be added later via supplyCollateral().
+The newly created position has no debt and is marked with ACTIVE status. The position ID
+is implicitly the index of the position in the user's positions array (positions.length - 1).*
 
 **Notes:**
-- security: Non-reentrant and pausable to prevent attack vectors
+- requirements: 
+- Protocol must not be paused
+- Asset must be whitelisted in the protocol (validAsset modifier)
 
-- validation: Checks:
-- Asset must be listed in the protocol
-- If isolation mode is enabled, asset must be eligible
+- state-changes: 
+- Creates new UserPosition entry in positions[msg.sender] array
+- Sets position.isIsolated based on parameter
+- Sets position.status to ACTIVE
+- For isolated positions: adds the asset to the position's asset set
 
-- events: Emits:
-- PositionCreated with user address, position ID, and isolation mode status
+- emits: 
+- PositionCreated(msg.sender, positionId, isIsolated)
 
-- access: Public function, any user can create positions
+- access-control: Available to any caller when protocol is not paused
+
+- error-cases: 
+- MaxPositionLimitReached: Thrown when user has reached the maximum position count
+- NotListed: Thrown when asset is not whitelisted
 
 
 ```solidity
@@ -842,42 +813,178 @@ function createPosition(address asset, bool isIsolated) external validAsset(asse
 
 |Name|Type|Description|
 |----|----|-----------|
-|`asset`|`address`|The initial collateral asset address for the position|
-|`isIsolated`|`bool`|Whether the position should use isolation mode|
+|`asset`|`address`|Address of the initial collateral asset for the position|
+|`isIsolated`|`bool`|Whether the position uses isolation mode (true = single-asset only)|
+
+
+### supplyCollateral
+
+Supplies collateral assets to a position
+
+*This function handles adding collateral to an existing position, which includes:
+1. Processing the deposit via _processDeposit (validation and state updates)
+2. Emitting the supply event
+3. Transferring the assets from the caller to the protocol
+The collateral can be used to either open new borrowing capacity or
+strengthen the collateralization ratio of an existing debt position.
+For isolated positions, only the initial asset type can be supplied.
+For cross-collateral positions, multiple asset types can be added
+(up to a maximum of 20 different assets per position).*
+
+**Notes:**
+- requirements: 
+- Protocol must not be paused
+- Position must exist and be in ACTIVE status
+- Asset must be whitelisted in the protocol
+- Asset must not be at its global capacity limit
+- For isolated positions: asset must match the position's initial asset
+- For isolated assets: position must be in isolation mode
+- Position must have fewer than 20 different asset types (if adding a new asset type)
+
+- state-changes: 
+- Increases positionCollateralAmounts[msg.sender][positionId][asset] by amount
+- Adds asset to positionCollateralAssets[msg.sender][positionId] if not already present
+- Updates protocol-wide TVL for the asset
+- Transfers asset tokens from msg.sender to the contract
+
+- emits: 
+- SupplyCollateral(msg.sender, positionId, asset, amount)
+
+- access-control: Available to position owners when protocol is not paused
+
+- error-cases: 
+- ZeroAmount: Thrown when amount is zero
+- InvalidPosition: Thrown when position doesn't exist
+- InactivePosition: Thrown when position is not in ACTIVE status
+- NotListed: Thrown when asset is not whitelisted
+- AssetCapacityReached: Thrown when asset has reached global capacity limit
+- IsolatedAssetViolation: Thrown when supplying isolated-tier asset to a cross position
+- InvalidAssetForIsolation: Thrown when supplying an asset that doesn't match the isolated position's asset
+- MaximumAssetsReached: Thrown when position already has 20 different asset types
+
+
+```solidity
+function supplyCollateral(address asset, uint256 amount, uint256 positionId)
+    external
+    validAmount(amount)
+    nonReentrant
+    whenNotPaused;
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`asset`|`address`|Address of the collateral asset to supply|
+|`amount`|`uint256`|Amount of the asset to supply as collateral|
+|`positionId`|`uint256`|ID of the position to receive the collateral|
+
+
+### withdrawCollateral
+
+Withdraws collateral assets from a position
+
+*This function handles removing collateral from an existing position, which includes:
+1. Processing the withdrawal via _processWithdrawal (validation and state updates)
+2. Emitting the withdrawal event
+3. Transferring the assets from the protocol to the caller
+The function ensures that the position remains sufficiently collateralized
+after the withdrawal by checking that the remaining credit limit exceeds
+the outstanding debt.*
+
+**Notes:**
+- requirements: 
+- Protocol must not be paused
+- Position must exist and be in ACTIVE status
+- For isolated positions: asset must match the position's initial asset
+- Current balance must be greater than or equal to the withdrawal amount
+- Position must remain sufficiently collateralized after withdrawal
+
+- state-changes: 
+- Decreases positionCollateralAmounts[msg.sender][positionId][asset] by amount
+- Updates protocol-wide TVL for the asset
+- For non-isolated positions: Removes asset entirely if balance becomes zero
+- Transfers asset tokens from the contract to msg.sender
+
+- emits: 
+- WithdrawCollateral(msg.sender, positionId, asset, amount)
+
+- access-control: Available to position owners when protocol is not paused
+
+- error-cases: 
+- ZeroAmount: Thrown when amount is zero
+- InvalidPosition: Thrown when position doesn't exist
+- InactivePosition: Thrown when position is not in ACTIVE status
+- InvalidAssetForIsolation: Thrown when withdrawing an asset that doesn't match the isolated position's asset
+- LowBalance: Thrown when not enough collateral balance to withdraw
+- CreditLimitExceeded: Thrown when withdrawal would leave position undercollateralized
+
+
+```solidity
+function withdrawCollateral(address asset, uint256 amount, uint256 positionId)
+    external
+    validAmount(amount)
+    nonReentrant
+    whenNotPaused;
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`asset`|`address`|Address of the collateral asset to withdraw|
+|`amount`|`uint256`|Amount of the asset to withdraw|
+|`positionId`|`uint256`|ID of the position from which to withdraw|
 
 
 ### borrow
 
-Allows users to borrow USDC against their collateral position
+Borrows USDC from the protocol against a collateralized position
 
-*Process:
-1. Checks protocol liquidity
-2. Validates isolation mode constraints
-3. Verifies credit limit
-4. Updates position state and protocol metrics*
+*This function handles the borrowing process including:
+1. Interest accrual on any existing debt
+2. Multiple validation checks (liquidity, debt caps, credit limits)
+3. Protocol and position accounting updates
+4. USDC transfer to the borrower
+The function first accrues any pending interest on existing debt to ensure
+all calculations use up-to-date values. It then validates the borrow request
+against protocol-wide constraints (available liquidity) and position-specific
+constraints (isolation debt caps, credit limits).
+After successful validation, it updates the position's debt, the protocol's
+total debt accounting, and transfers the requested USDC amount to the borrower.*
 
 **Notes:**
-- security: Non-reentrant and pausable to prevent attack vectors
+- requirements: 
+- Protocol must not be paused
+- Position must exist and be in ACTIVE status
+- Amount must be greater than zero
+- Protocol must have sufficient liquidity
+- For isolated positions: borrow must not exceed asset's isolation debt cap
+- Total debt must not exceed position's credit limit
 
-- validation: Checks:
-- Position exists (via validPosition modifier)
-- Sufficient protocol liquidity
-- Isolation debt cap (if applicable)
-- Isolation collateral existence
-- Credit limit not exceeded
+- state-changes: 
+- Increases position.debtAmount by amount plus any accrued interest
+- Updates position.lastInterestAccrual to current timestamp
+- Increases totalBorrow by amount plus any accrued interest
+- Increases totalAccruedBorrowerInterest if interest is accrued
 
-- events: Emits:
-- Borrow event with borrower address, position ID, and amount
+- emits: 
+- Borrow(msg.sender, positionId, amount)
+- InterestAccrued(msg.sender, positionId, accruedInterest) if interest was accrued
 
-- state: Updates:
-- Position debt amount
-- Last interest accrual timestamp
-- Total protocol borrow amount
+- access-control: Available to position owners when protocol is not paused
+
+- error-cases: 
+- ZeroAmount: Thrown when amount is zero
+- LowLiquidity: Thrown when protocol doesn't have enough available liquidity
+- IsolationDebtCapExceeded: Thrown when exceeding an isolated asset's debt cap
+- CreditLimitExceeded: Thrown when total debt would exceed position's credit limit
+- InvalidPosition: Thrown when position doesn't exist
+- InactivePosition: Thrown when position is not in ACTIVE status
 
 
 ```solidity
 function borrow(uint256 positionId, uint256 amount)
     external
+    validAmount(amount)
     activePosition(msg.sender, positionId)
     nonReentrant
     whenNotPaused;
@@ -886,37 +993,45 @@ function borrow(uint256 positionId, uint256 amount)
 
 |Name|Type|Description|
 |----|----|-----------|
-|`positionId`|`uint256`|The ID of the borrower's position|
-|`amount`|`uint256`|The amount of USDC to borrow|
+|`positionId`|`uint256`|ID of the collateralized position to borrow against|
+|`amount`|`uint256`|Amount of USDC to borrow (in base units with 6 decimals)|
 
 
 ### repay
 
-Allows users to repay debt on their borrowing position
+Repays borrowed USDC for a position, including accrued interest
 
-*Handles both partial and full repayments, with interest paid first*
+*This function handles the repayment process including:
+1. Validation of the position's debt status
+2. Processing the repayment via _processRepay (accounting updates)
+3. Transferring USDC from the user to the protocol
+The function supports both partial and full repayments. If the user attempts
+to repay more than they owe, only the outstanding debt amount is taken.
+Interest accrual is handled automatically by the _processRepay function.*
 
 **Notes:**
-- security: Non-reentrant and pausable to prevent attack vectors
+- requirements: 
+- Protocol must not be paused
+- Position must exist and be in ACTIVE status
+- Position must have existing debt to repay
 
-- validation: Checks:
-- Position exists (via validPosition modifier)
-- Position has debt to repay
+- state-changes: 
+- Decreases position.debtAmount by the repayment amount
+- Updates position.lastInterestAccrual to current timestamp
+- Updates totalBorrow to reflect repayment and accrued interest
+- Updates totalAccruedBorrowerInterest by adding newly accrued interest
 
-- calculations: 
-- Calculates total debt with accrued interest
-- Caps repayment at total debt amount
-- Separates interest from principal repayment
+- emits: 
+- Repay(msg.sender, positionId, actualAmount)
+- InterestAccrued(msg.sender, positionId, accruedInterest)
 
-- events: Emits:
-- Repay with amount repaid
-- InterestAccrued with interest amount
+- access-control: Available to position owners when protocol is not paused
 
-- state: Updates:
-- Position debt amount
-- Total protocol borrow amount
-- Total accrued borrower interest
-- Last interest accrual timestamp
+- error-cases: 
+- ZeroAmount: Thrown when amount is zero
+- NoDebt: Thrown when position has no debt to repay
+- InvalidPosition: Thrown when position doesn't exist
+- InactivePosition: Thrown when position is not in ACTIVE status
 
 
 ```solidity
@@ -930,38 +1045,47 @@ function repay(uint256 positionId, uint256 amount)
 
 |Name|Type|Description|
 |----|----|-----------|
-|`positionId`|`uint256`|The ID of the position to repay debt for|
-|`amount`|`uint256`|The amount of USDC to repay|
+|`positionId`|`uint256`|ID of the position with debt to repay|
+|`amount`|`uint256`|Amount of USDC to repay (repays full debt if amount exceeds balance)|
 
 
 ### exitPosition
 
-Closes a borrowing position by repaying all debt and withdrawing collateral
+Closes a borrowing position by repaying all debt and withdrawing all collateral
 
-*Process:
-1. Repays any outstanding debt with interest
-2. Withdraws all collateral assets
-3. Clears isolation mode settings if active
-4. Removes the position from user's positions array*
+*This function handles the complete position closure process, which includes:
+1. Repaying any outstanding debt with interest (if debt exists)
+2. Withdrawing all collateral assets back to the owner
+3. Marking the position as CLOSED in the protocol
+The function allows users to exit their positions with a single transaction
+rather than calling separate repay and withdraw functions for each asset.
+For full debt repayment, it uses the max uint256 value to signal "repay all".*
 
 **Notes:**
-- security: Non-reentrant and pausable to prevent attack vectors
+- requirements: 
+- Protocol must not be paused
+- Position must exist and be in ACTIVE status
+- If position has debt, caller must have approved sufficient USDC
 
-- validation: Checks:
-- Position exists (via validPosition modifier)
-- User has sufficient USDC balance to repay debt
+- state-changes: 
+- Repays any debt in the position (position.debtAmount = 0)
+- Updates position.lastInterestAccrual if debt existed
+- Removes all collateral assets from the position
+- Updates protocol-wide TVL for each asset
+- Sets position.status to CLOSED
 
-- events: Emits:
-- Repay when debt is repaid
-- WithdrawCollateral for each asset withdrawn
-- ExitedIsolationMode if position was in isolation mode
-- PositionClosed when position is fully closed
+- emits: 
+- PositionClosed(msg.sender, positionId)
+- Repay(msg.sender, positionId, actualAmount) if debt existed
+- InterestAccrued(msg.sender, positionId, accruedInterest) if interest was accrued
+- WithdrawCollateral(msg.sender, positionId, asset, amount) for each collateral asset
 
-- state: Updates:
-- Clears position debt and collateral
-- Updates total protocol borrow amount
-- Updates total collateral amounts
-- Removes position from storage
+- access-control: Available to position owners when protocol is not paused
+
+- error-cases: 
+- ZeroAmount: Thrown when amount is zero (from validAmount modifier in _processRepay)
+- InvalidPosition: Thrown when position doesn't exist (from activePosition modifier)
+- InactivePosition: Thrown when position is not in ACTIVE status (from activePosition modifier)
 
 
 ```solidity
@@ -971,27 +1095,52 @@ function exitPosition(uint256 positionId) external activePosition(msg.sender, po
 
 |Name|Type|Description|
 |----|----|-----------|
-|`positionId`|`uint256`|The ID of the position to close|
+|`positionId`|`uint256`|ID of the position to close|
 
 
 ### liquidate
 
-Liquidates an undercollateralized borrowing position
+Liquidates an undercollateralized position to maintain protocol solvency
 
-*Process:
-1. Verifies liquidator has sufficient governance tokens
-2. Confirms position is actually liquidatable (health factor < 1)
-3. Calculates total debt including accrued interest
-4. Determines liquidation bonus based on collateral tier
-5. Transfers required USDC from liquidator
-6. Transfers all position collateral to liquidator*
+*This function handles the liquidation process including:
+1. Verification that the caller owns sufficient governance tokens
+2. Confirmation that the position's health factor is below 1.0
+3. Calculation of debt with accrued interest and liquidation fee
+4. Position state updates (marking as liquidated, clearing debt)
+5. Transferring debt+fee from liquidator to the protocol
+6. Transferring all collateral assets to the liquidator
+The liquidator receives all collateral assets in exchange for repaying
+the position's debt plus a liquidation fee. The fee percentage varies
+based on the collateral tier of the position's assets.*
 
 **Notes:**
-- security: Non-reentrant and pausable to prevent attack vectors
+- requirements: 
+- Protocol must not be paused
+- Position must exist and be in ACTIVE status
+- Caller must hold at least liquidatorThreshold amount of governance tokens
+- Position's health factor must be below 1.0 (undercollateralized)
 
-- validation: Added checks:
-- Liquidator has sufficient USDC balance
-- Health factor is below liquidation threshold
+- state-changes: 
+- Sets position.isIsolated to false
+- Sets position.debtAmount to 0
+- Sets position.lastInterestAccrual to 0
+- Sets position.status to LIQUIDATED
+- Decreases totalBorrow by the position's debt amount
+- Increases totalAccruedBorrowerInterest by any accrued interest
+- Removes all collateral assets from the position
+- Updates protocol-wide TVL for each asset
+
+- emits: 
+- Liquidated(user, positionId, msg.sender)
+- WithdrawCollateral(user, positionId, asset, amount) for each collateral asset
+
+- access-control: Available to any caller with sufficient governance tokens when protocol is not paused
+
+- error-cases: 
+- NotEnoughGovernanceTokens: Thrown when caller doesn't have enough governance tokens
+- NotLiquidatable: Thrown when position's health factor is above 1.0
+- InvalidPosition: Thrown when position doesn't exist
+- InactivePosition: Thrown when position is not in ACTIVE status
 
 
 ```solidity
@@ -1005,462 +1154,118 @@ function liquidate(address user, uint256 positionId)
 
 |Name|Type|Description|
 |----|----|-----------|
-|`user`|`address`|The address of the position owner to liquidate|
-|`positionId`|`uint256`|The ID of the position to liquidate|
+|`user`|`address`|Address of the position owner being liquidated|
+|`positionId`|`uint256`|ID of the position to liquidate|
 
 
 ### interpositionalTransfer
 
-Moves collateral assets directly between non-isolated positions owned by the same user
+Transfers collateral between two positions owned by the same user
 
-*More gas-efficient than withdrawing and redepositing as no token transfers occur*
+*Validates both the withdrawal from the source position and the deposit to the destination position.
+This function ensures that the collateral transfer adheres to the protocol's rules regarding
+isolation and cross-collateral positions.*
 
 **Notes:**
-- security: Non-reentrant and pausable to prevent attack vectors
+- access-control: Available to position owners when the protocol is not paused
 
-- validation: Checks:
-- Both positions must exist and be active (via activePosition modifier)
-- Neither position can be in isolation mode
-- Asset must be listed and active
-- Source position must have sufficient collateral
-- Source position must remain adequately collateralized after transfer
-- Target position must not exceed maximum asset limit (20)
+- events: Emits an InterPositionalTransfer event
 
-- events: Emits:
-- InterPositionalTransfer with details of the transfer
+- requirements: 
+- Protocol must not be paused
+- Asset must be whitelisted in the protocol
+- Source position must exist and be in ACTIVE status
+- Destination position must exist and be in ACTIVE status
+- Source position must have sufficient collateral balance of the specified asset
+- Destination position must adhere to isolation rules if applicable
+
+- state-changes: 
+- Decreases the collateral amount of the specified asset in the source position
+- Increases the collateral amount of the specified asset in the destination position
+- Updates protocol-wide TVL for the asset
+
+- error-cases: 
+- ZeroAmount: Thrown when amount is zero
+- InvalidPosition: Thrown when position doesn't exist
+- InactivePosition: Thrown when position is not in ACTIVE status
+- NotListed: Thrown when asset is not whitelisted
+- LowBalance: Thrown when position doesn't have sufficient asset balance
+- IsolatedAssetViolation: Thrown when transferring isolated-tier asset to a cross position
+- InvalidAssetForIsolation: Thrown when asset doesn't match isolated position's asset
+- MaximumAssetsReached: Thrown when destination position already has 20 different assets
 
 
 ```solidity
 function interpositionalTransfer(uint256 fromPositionId, uint256 toPositionId, address asset, uint256 amount)
     external
-    activePosition(msg.sender, fromPositionId)
-    activePosition(msg.sender, toPositionId)
     validAsset(asset)
-    nonReentrant
-    whenNotPaused;
+    validAmount(amount)
+    whenNotPaused
+    nonReentrant;
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`fromPositionId`|`uint256`|ID of the source position to transfer from|
-|`toPositionId`|`uint256`|ID of the destination position to transfer to|
-|`asset`|`address`|Address of the collateral asset to transfer|
-|`amount`|`uint256`|Amount of the asset to transfer|
+|`fromPositionId`|`uint256`|The ID of the position to transfer collateral from|
+|`toPositionId`|`uint256`|The ID of the position to transfer collateral to|
+|`asset`|`address`|The address of the collateral asset to transfer|
+|`amount`|`uint256`|The amount of the asset to transfer|
 
 
-### updateBaseProfitTarget
+### updateProtocolMetrics
 
-Updates the base profit target rate for the protocol
+Updates multiple protocol parameters in a single transaction
 
-*Updates the profit target used for calculating protocol fees and rewards*
+*All parameters are validated against minimum or maximum constraints*
 
 **Notes:**
-- security: Can only be called by accounts with MANAGER_ROLE
+- access-control: Restricted to MANAGER_ROLE
 
-- validation: Checks:
-- Rate must be at least 0.25% (0.0025e6)
+- events: Emits a ProtocolMetricsUpdated event
 
-- events: Emits:
-- UpdateBaseProfitTarget with new rate value
+- error-cases: 
+- InvalidProfitTarget: Thrown when profit target rate is below minimum
+- InvalidBorrowRate: Thrown when borrow rate is below minimum
+- InvalidRewardAmount: Thrown when reward amount exceeds maximum
+- InvalidInterval: Thrown when interval is below minimum
+- InvalidSupplyAmount: Thrown when supply amount is below minimum
+- InvalidLiquidatorThreshold: Thrown when liquidator threshold is below minimum
 
 
 ```solidity
-function updateBaseProfitTarget(uint256 rate) external onlyRole(MANAGER_ROLE);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`rate`|`uint256`|The new base profit target rate in parts per million (e.g., 0.0025e6 = 0.25%)|
-
-
-### updateBaseBorrowRate
-
-Updates the base borrow interest rate for the protocol
-
-*Updates the minimum borrow rate applied to all loans*
-
-**Notes:**
-- security: Can only be called by accounts with MANAGER_ROLE
-
-- validation: Checks:
-- Rate must be at least 1% (0.01e6)
-
-- events: Emits:
-- UpdateBaseBorrowRate with new rate value
-
-
-```solidity
-function updateBaseBorrowRate(uint256 rate) external onlyRole(MANAGER_ROLE);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`rate`|`uint256`|The new base borrow rate in parts per million (e.g., 0.01e6 = 1%)|
-
-
-### updateTargetReward
-
-Updates the target reward amount for liquidity providers
-
-*Updates the maximum reward amount achievable over a full reward interval*
-
-**Notes:**
-- security: Can only be called by accounts with MANAGER_ROLE
-
-- validation: Checks:
-- Amount must not exceed 10,000 tokens
-
-- events: Emits:
-- UpdateTargetReward with new amount
-
-
-```solidity
-function updateTargetReward(uint256 amount) external onlyRole(MANAGER_ROLE);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`amount`|`uint256`|The new target reward amount in LP tokens|
-
-
-### updateRewardInterval
-
-Updates the time interval for calculating liquidity provider rewards
-
-*Updates the duration over which max rewards can be earned*
-
-**Notes:**
-- security: Can only be called by accounts with MANAGER_ROLE
-
-- validation: Checks:
-- Interval must be at least 90 days
-
-- events: Emits:
-- UpdateRewardInterval with new interval value
-
-
-```solidity
-function updateRewardInterval(uint256 interval) external onlyRole(MANAGER_ROLE);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`interval`|`uint256`|The new reward interval in seconds|
-
-
-### updateRewardableSupply
-
-Updates the minimum supply required for reward eligibility
-
-*Updates the threshold for liquidity providers to be eligible for rewards*
-
-**Notes:**
-- security: Can only be called by accounts with MANAGER_ROLE
-
-- validation: Checks:
-- Amount must be at least 20,000 WAD
-
-- events: Emits:
-- UpdateRewardableSupply with new amount
-
-
-```solidity
-function updateRewardableSupply(uint256 amount) external onlyRole(MANAGER_ROLE);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`amount`|`uint256`|The new minimum supply amount (scaled by WAD)|
-
-
-### updateLiquidatorThreshold
-
-Updates the minimum governance tokens required to perform liquidations
-
-*Updates the minimum token requirement for liquidator eligibility*
-
-**Notes:**
-- security: Can only be called by accounts with MANAGER_ROLE
-
-- validation: Checks:
-- Amount must be at least 10 tokens
-
-- events: Emits:
-- UpdateLiquidatorThreshold with new amount
-
-
-```solidity
-function updateLiquidatorThreshold(uint256 amount) external onlyRole(MANAGER_ROLE);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`amount`|`uint256`|The new threshold amount in governance tokens (18 decimals)|
-
-
-### updateTierParameters
-
-Updates the risk parameters for a collateral tier
-
-*Updates both interest rates and liquidation incentives for a specific risk tier*
-
-**Notes:**
-- security: Can only be called by accounts with MANAGER_ROLE
-
-- validation: Checks:
-- Borrow rate must not exceed 25% (0.25e6)
-- Liquidation bonus must not exceed 20% (0.2e6)
-
-- events: Emits:
-- TierParametersUpdated with tier, new borrow rate, and new liquidation bonus
-
-
-```solidity
-function updateTierParameters(CollateralTier tier, uint256 borrowRate, uint256 liquidationFee)
-    external
-    onlyRole(MANAGER_ROLE);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`tier`|`CollateralTier`|The collateral tier to update|
-|`borrowRate`|`uint256`|The new base borrow rate for the tier (in parts per million)|
-|`liquidationFee`|`uint256`|The new liquidation bonus for the tier (in parts per million)|
-
-
-### updateAssetTier
-
-Updates the risk tier classification for a listed asset
-
-*Changes the risk classification which affects interest rates and liquidation parameters*
-
-**Notes:**
-- security: Can only be called by accounts with MANAGER_ROLE
-
-- validation: Checks:
-- Asset must be listed in the protocol
-
-- events: Emits:
-- AssetTierUpdated with asset address and new tier
-
-- impact: Changes:
-- Asset's borrow rate via tierJumpRate
-- Asset's liquidation bonus via tierLiquidationFee
-
-
-```solidity
-function updateAssetTier(address asset, CollateralTier newTier) external validAsset(asset) onlyRole(MANAGER_ROLE);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|The address of the asset to update|
-|`newTier`|`CollateralTier`|The new CollateralTier to assign to the asset|
-
-
-### updateAssetConfig
-
-Updates or adds a new asset configuration in the protocol
-
-*Manages all configuration parameters for an asset in a single function*
-
-**Notes:**
-- security: Can only be called by accounts with MANAGER_ROLE
-
-- validation: Adds asset to listedAsset set if not already present
-
-- state: Updates:
-- Asset configuration in assetInfo mapping
-- Listed assets enumerable set
-
-- events: Emits:
-- UpdateAssetConfig with asset address
-
-
-```solidity
-function updateAssetConfig(
-    address asset,
-    address oracle_,
-    uint8 oracleDecimals,
-    uint8 assetDecimals,
-    uint8 active,
-    uint32 borrowThreshold,
-    uint32 liquidationThreshold,
-    uint256 maxSupplyLimit,
-    CollateralTier tier,
-    uint256 isolationDebtCap
+function updateProtocolMetrics(
+    uint256 profitTargetRate,
+    uint256 borrowRate,
+    uint256 rewardAmount,
+    uint256 interval,
+    uint256 supplyAmount,
+    uint256 liquidatorAmount
 ) external onlyRole(MANAGER_ROLE);
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`asset`|`address`|Address of the token to configure|
-|`oracle_`|`address`|Address of the Chainlink price feed for asset/USD|
-|`oracleDecimals`|`uint8`|Number of decimals in the oracle price feed|
-|`assetDecimals`|`uint8`|Number of decimals in the asset token|
-|`active`|`uint8`|Whether the asset is enabled (1) or disabled (0)|
-|`borrowThreshold`|`uint32`|LTV ratio for borrowing (e.g., 870 = 87%)|
-|`liquidationThreshold`|`uint32`|LTV ratio for liquidation (e.g., 920 = 92%)|
-|`maxSupplyLimit`|`uint256`|Maximum amount of this asset allowed in protocol|
-|`tier`|`CollateralTier`|Risk category of the asset (STABLE, CROSS_A, CROSS_B, ISOLATED)|
-|`isolationDebtCap`|`uint256`|Maximum debt allowed when used in isolation mode|
-
-
-### addAssetOracle
-
-Adds an additional oracle data source for an asset
-
-*Allows adding secondary or backup oracles to enhance price reliability*
-
-**Note:**
-security: Can only be called by accounts with MANAGER_ROLE
-
-
-```solidity
-function addAssetOracle(address asset, address oracle, uint8 decimals_)
-    external
-    validAsset(asset)
-    onlyRole(MANAGER_ROLE);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|Address of the asset|
-|`oracle`|`address`|Address of the Chainlink price feed to add|
-|`decimals_`|`uint8`|Number of decimals in the oracle price feed|
-
-
-### removeAssetOracle
-
-Removes an oracle data source for an asset
-
-*Allows removing unreliable or deprecated oracles*
-
-**Note:**
-security: Can only be called by accounts with MANAGER_ROLE
-
-
-```solidity
-function removeAssetOracle(address asset, address oracle) external validAsset(asset) onlyRole(MANAGER_ROLE);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|Address of the asset|
-|`oracle`|`address`|Address of the Chainlink price feed to remove|
-
-
-### setPrimaryAssetOracle
-
-Sets the primary oracle for an asset
-
-*The primary oracle is used as a fallback when median calculation fails*
-
-**Note:**
-security: Can only be called by accounts with MANAGER_ROLE
-
-
-```solidity
-function setPrimaryAssetOracle(address asset, address oracle) external validAsset(asset) onlyRole(MANAGER_ROLE);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|Address of the asset|
-|`oracle`|`address`|Address of the Chainlink price feed to set as primary|
-
-
-### updateOracleTimeThresholds
-
-Updates oracle time thresholds
-
-*Controls how old price data can be before rejection*
-
-**Note:**
-security: Can only be called by accounts with MANAGER_ROLE
-
-
-```solidity
-function updateOracleTimeThresholds(uint256 freshness, uint256 volatility) external onlyRole(MANAGER_ROLE);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`freshness`|`uint256`|Maximum age for all price data (in seconds)|
-|`volatility`|`uint256`|Maximum age for volatile price data (in seconds)|
-
-
-### getTierRates
-
-Retrieves the current borrow rates and liquidation bonuses for all collateral tiers
-
-*Returns two fixed arrays containing rates for ISOLATED, CROSS_A, CROSS_B, and STABLE tiers in that order*
-
-**Note:**
-returns-description: Index mapping:
-- [0] = ISOLATED tier rates
-- [1] = CROSS_B tier rates
-- [2] = CROSS_A tier rates
-- [3] = STABLE tier rates
-
-
-```solidity
-function getTierRates() external view returns (uint256[4] memory jumpRates, uint256[4] memory liquidationFees);
-```
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`jumpRates`|`uint256[4]`|Array of borrow rates for each tier [ISOLATED, CROSS_A, CROSS_B, STABLE]|
-|`liquidationFees`|`uint256[4]`|Array of liquidation bonuses for each tier [ISOLATED, CROSS_A, CROSS_B, STABLE]|
-
-
-### getListedAssets
-
-Returns an array of all listed asset addresses in the protocol
-
-*Retrieves assets from the EnumerableSet storing listed assets*
-
-**Notes:**
-- complexity: O(n) where n is the number of listed assets
-
-- state-access: Read-only function, no state modifications
-
-
-```solidity
-function getListedAssets() external view returns (address[] memory);
-```
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`<none>`|`address[]`|Array of addresses representing all listed assets|
+|`profitTargetRate`|`uint256`|New base profit target rate (min 0.25%)|
+|`borrowRate`|`uint256`|New base borrow rate (min 1%)|
+|`rewardAmount`|`uint256`|New target reward amount (max 10,000 tokens)|
+|`interval`|`uint256`|New reward interval in seconds (min 90 days)|
+|`supplyAmount`|`uint256`|New minimum rewardable supply amount (min 20,000 USDC)|
+|`liquidatorAmount`|`uint256`|New minimum liquidator token threshold (min 10 tokens)|
 
 
 ### getUserPosition
 
-Retrieves a user's borrowing position details
+Retrieves a user's position data by ID
 
-*Returns the full UserPosition struct containing position details*
+*Returns the full position struct including isolation status, debt, and status*
 
 **Notes:**
-- security: Validates position exists via validPosition modifier
+- access-control: Available to any caller, read-only
 
-- access: Public view function, no state modifications
+- error-cases: 
+- InvalidPosition: Thrown when position doesn't exist
 
 
 ```solidity
@@ -1474,30 +1279,28 @@ function getUserPosition(address user, uint256 positionId)
 
 |Name|Type|Description|
 |----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the position to query|
+|`user`|`address`|Address of the position owner|
+|`positionId`|`uint256`|ID of the position to query|
 
 **Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`UserPosition`|UserPosition struct containing: - isIsolated: Whether position is in isolation mode - isolatedAsset: Address of isolated asset (if applicable) - debtAmount: Current principal debt amount - lastInterestAccrual: Timestamp of last interest accrual|
+|`<none>`|`UserPosition`|UserPosition struct containing the position's details|
 
 
-### getUserCollateralAmount
+### getCollateralAmount
 
-Retrieves the amount of collateral asset a user has in a specific position
+Gets the amount of a specific collateral asset in a position
 
-*Checks the collateral amount mapping for a specific user's position*
+*Returns zero for assets not used in the position*
 
-**Notes:**
-- security: Validates position exists via validPosition modifier
-
-- access: Public view function, no state modifications
+**Note:**
+access-control: Available to any caller, read-only
 
 
 ```solidity
-function getUserCollateralAmount(address user, uint256 positionId, address asset)
+function getCollateralAmount(address user, uint256 positionId, address asset)
     external
     view
     validPosition(user, positionId)
@@ -1507,83 +1310,73 @@ function getUserCollateralAmount(address user, uint256 positionId, address asset
 
 |Name|Type|Description|
 |----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the position to query|
-|`asset`|`address`|The address of the collateral asset to check|
+|`user`|`address`|Address of the position owner|
+|`positionId`|`uint256`|ID of the position to query|
+|`asset`|`address`|Address of the collateral asset|
 
 **Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint256`|uint256 The amount of collateral asset in the position (in asset's native decimals)|
+|`<none>`|`uint256`|Amount of the specified asset used as collateral|
 
 
-### getProtocolSnapshot
+### getPositionCollateralAssets
 
-Returns a comprehensive snapshot of the protocol's current state
+Gets all collateral asset addresses used in a position
 
-*Aggregates key protocol metrics and parameters into a single struct*
-
-**Notes:**
-- state-access: Read-only view of protocol state
-
-- calculations: Uses:
-- getUtilization() for usage metrics
-- getBorrowRate() for current rates
-- getSupplyRate() for LP returns
+*Returns an array of addresses that can be used to query amounts*
 
 
 ```solidity
-function getProtocolSnapshot() external view returns (ProtocolSnapshot memory);
-```
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`<none>`|`ProtocolSnapshot`|ProtocolSnapshot A struct containing: - utilization: Current protocol utilization rate - borrowRate: Base borrow rate (using STABLE tier as reference) - supplyRate: Current supply rate for liquidity providers - totalBorrow: Total amount borrowed from protocol - totalSuppliedLiquidity: Total USDC supplied to protocol - targetReward: Current target reward amount - rewardInterval: Duration of reward period - rewardableSupply: Minimum supply for reward eligibility - baseProfitTarget: Protocol's base profit margin - liquidatorThreshold: Required governance tokens for liquidators - flashLoanFee: Current flash loan fee rate|
-
-
-### getAssetPrice
-
-Gets the current USD price for an asset from the oracle module
-
-*Uses the oracle module to get the median price from multiple sources*
-
-
-```solidity
-function getAssetPrice(address asset) public returns (uint256);
+function getPositionCollateralAssets(address user, uint256 positionId)
+    external
+    view
+    validPosition(user, positionId)
+    returns (address[] memory);
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`asset`|`address`|The address of the asset to price|
+|`user`|`address`|Address of the position owner|
+|`positionId`|`uint256`|ID of the position to query|
 
 **Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint256`|uint256 The asset price in USD (scaled by oracle decimals)|
+|`<none>`|`address[]`|Array of addresses representing all collateral assets in the position|
+
+
+### getLiquidityAccrueTimeIndex
+
+Gets the timestamp of the last liquidity reward accrual for a user
+
+*Used to determine reward eligibility and calculate reward amounts*
+
+
+```solidity
+function getLiquidityAccrueTimeIndex(address user) external view returns (uint256);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`user`|`address`|The address of the user to query|
+
+**Returns**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`<none>`|`uint256`|The timestamp when rewards were last accrued (or 0 if never)|
 
 
 ### calculateDebtWithInterest
 
-Calculates the total debt amount including accrued interest for a position
+Calculates the current debt including accrued interest for a position
 
-*Process:
-1. Returns 0 if position has no debt
-2. Calculates elapsed time since last interest accrual
-3. Determines applicable interest rate based on collateral tier
-4. Compounds interest using ray math*
-
-**Notes:**
-- validation: Checks:
-- Position exists (via validPosition modifier)
-
-- calculations: Uses:
-- For isolated positions: uses isolated asset's tier rate
-- For cross-collateral: uses highest tier rate among assets
-- Compounds interest based on time elapsed
+*Uses the appropriate interest rate based on the position's collateral tier*
 
 
 ```solidity
@@ -1597,65 +1390,21 @@ function calculateDebtWithInterest(address user, uint256 positionId)
 
 |Name|Type|Description|
 |----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the position to calculate debt for|
+|`user`|`address`|Address of the position owner|
+|`positionId`|`uint256`|ID of the position to calculate debt for|
 
 **Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint256`|uint256 Total debt including accrued interest|
-
-
-### getAssetInfo
-
-Retrieves complete configuration details for a listed asset
-
-*Returns the full Asset struct from assetInfo mapping*
-
-
-```solidity
-function getAssetInfo(address asset) public view returns (Asset memory);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|The address of the asset to query|
-
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`<none>`|`Asset`|Asset struct containing all configuration parameters|
-
-
-### getAssetPriceOracle
-
-DEPRECATED: Direct oracle price access
-
-*This function is maintained for backward compatibility*
-
-
-```solidity
-function getAssetPriceOracle(address oracle) public view returns (uint256);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`oracle`|`address`|The address of the Chainlink price feed oracle|
-
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`<none>`|`uint256`|Price from the oracle (use getAssetPrice instead)|
+|`<none>`|`uint256`|The total debt amount including principal and accrued interest|
 
 
 ### getUserPositionsCount
 
-Gets the total number of positions for a user
+Gets the number of positions owned by a user
+
+*Includes all positions regardless of status (active, closed, liquidated)*
 
 
 ```solidity
@@ -1665,20 +1414,20 @@ function getUserPositionsCount(address user) public view returns (uint256);
 
 |Name|Type|Description|
 |----|----|-----------|
-|`user`|`address`|The address of the user to query|
+|`user`|`address`|Address of the user to query|
 
 **Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint256`|uint256 The number of positions owned by the user|
+|`<none>`|`uint256`|The number of positions created by the user|
 
 
 ### getUserPositions
 
-Retrieves all positions for a user
+Gets all positions owned by a user
 
-*Returns complete array of UserPosition structs*
+*Returns the full array of position structs for the user*
 
 
 ```solidity
@@ -1688,27 +1437,20 @@ function getUserPositions(address user) public view returns (UserPosition[] memo
 
 |Name|Type|Description|
 |----|----|-----------|
-|`user`|`address`|The address of the user to query|
+|`user`|`address`|Address of the user to query|
 
 **Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`UserPosition[]`|UserPosition[] Array of all user's positions|
+|`<none>`|`UserPosition[]`|Array of UserPosition structs for all the user's positions|
 
 
 ### getPositionLiquidationFee
 
-Gets the liquidation bonus percentage for a specific position
+Gets the liquidation fee percentage for a position
 
-*Returns tier-specific bonus for isolated positions, highest tier bonus for cross-collateral*
-
-**Notes:**
-- security: Validates position exists via validPosition modifier
-
-- calculations: Uses:
-- For isolated positions: returns tier's liquidation bonus
-- For cross-collateral: returns highest tier's liquidation bonus
+*Based on the highest risk tier among the position's collateral assets*
 
 
 ```solidity
@@ -1722,31 +1464,24 @@ function getPositionLiquidationFee(address user, uint256 positionId)
 
 |Name|Type|Description|
 |----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the position|
+|`user`|`address`|Address of the position owner|
+|`positionId`|`uint256`|ID of the position to query|
 
 **Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint256`|uint256 The liquidation bonus percentage in parts per million (e.g., 0.05e6 = 5%)|
+|`<none>`|`uint256`|The liquidation fee percentage in WAD format (e.g., 0.05e6 = 5%)|
 
 
 ### calculateCreditLimit
 
-Calculates the maximum allowed borrowing amount for a position
+Calculates the maximum borrowable amount for a position
 
-*Considers collateral value, borrowing threshold, and isolation mode status*
+*Based on collateral values and their respective borrow thresholds*
 
-**Notes:**
-- security: Validates position exists via validPosition modifier
-
-- calculations: 
-- Isolated positions: uses single asset's value and threshold
-- Cross-collateral: sums all assets' weighted values
-- Formula: amount * price * borrowThreshold * WAD / decimals / 1000
-
-- oracle: Uses Chainlink price feeds for asset valuations
+**Note:**
+access-control: Available to any caller, read-only
 
 
 ```solidity
@@ -1760,34 +1495,21 @@ function calculateCreditLimit(address user, uint256 positionId)
 
 |Name|Type|Description|
 |----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the position|
+|`user`|`address`|Address of the position owner|
+|`positionId`|`uint256`|ID of the position to calculate limit for|
 
 **Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint256`|uint256 The maximum allowed borrowing amount in USDC|
+|`<none>`|`uint256`|credit - The maximum amount of USDC that can be borrowed against the position|
 
 
 ### calculateCollateralValue
 
-Calculates the total USD value of all collateral assets in a position
+Calculates the total USD value of all collateral in a position
 
-*Calculates raw collateral value without applying any risk parameters*
-
-**Notes:**
-- security: Validates position exists via validPosition modifier
-
-- calculations: 
-- For isolated positions: returns single asset's USD value
-- For cross-collateral: sums all assets' USD values
-- Formula: amount * price * WAD / 10^assetDecimals / 10^oracleDecimals
-
-- oracle: Uses Chainlink price feeds for asset valuations
-
-- difference: Unlike calculateCreditLimit, this returns raw value without applying
-borrowThreshold or liquidationThreshold risk adjustments
+*Uses oracle prices to convert collateral amounts to USD value*
 
 
 ```solidity
@@ -1795,36 +1517,27 @@ function calculateCollateralValue(address user, uint256 positionId)
     public
     view
     validPosition(user, positionId)
-    returns (uint256);
+    returns (uint256 value);
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the position to value|
+|`user`|`address`|Address of the position owner|
+|`positionId`|`uint256`|ID of the position to calculate value for|
 
 **Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint256`|uint256 The total USD value of all collateral assets (scaled by WAD)|
+|`value`|`uint256`|- The total USD value of all collateral assets in the position|
 
 
 ### isLiquidatable
 
-Determines if a position can be liquidated based on health factor
+Determines if a position is eligible for liquidation
 
-*A position becomes liquidatable when its health factor falls below 1.0*
-
-**Notes:**
-- validation: Checks:
-- Position exists and is active (via activePosition modifier)
-- Position has non-zero debt
-
-- calculations: Uses:
-- health factor = (collateral value * liquidation threshold) / debt
-- Position is liquidatable when health factor < 1.0
+*Checks if health factor is below 1.0, indicating undercollateralization*
 
 
 ```solidity
@@ -1834,180 +1547,25 @@ function isLiquidatable(address user, uint256 positionId) public view activePosi
 
 |Name|Type|Description|
 |----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the position to check|
+|`user`|`address`|Address of the position owner|
+|`positionId`|`uint256`|ID of the position to check|
 
 **Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`bool`|bool True if position can be liquidated, false otherwise|
-
-
-### getPositionSummary
-
-Provides a comprehensive overview of a position's current state
-
-*Aggregates key position metrics into a single view for frontend display and risk assessment*
-
-**Notes:**
-- security: Validates position exists via validPosition modifier
-
-- calculations: Uses:
-- calculateCollateralValue() for total collateral valuation in USD
-- calculateDebtWithInterest() for current debt with accrued interest
-- calculateCreditLimit() for maximum borrowing capacity
-
-- position-status: Returns one of the following status values:
-- ACTIVE (1): Position is operational and can be modified
-- LIQUIDATED (0): Position has been liquidated due to insufficient collateral
-- CLOSED (2): Position has been voluntarily closed by the user
-
-
-```solidity
-function getPositionSummary(address user, uint256 positionId)
-    public
-    view
-    validPosition(user, positionId)
-    returns (
-        uint256 totalCollateralValue,
-        uint256 currentDebt,
-        uint256 availableCredit,
-        bool isIsolated,
-        PositionStatus status
-    );
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the position to summarize|
-
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`totalCollateralValue`|`uint256`|The total USD value of all collateral in the position|
-|`currentDebt`|`uint256`|The current debt including accrued interest|
-|`availableCredit`|`uint256`|The remaining borrowing capacity|
-|`isIsolated`|`bool`|Whether the position is in isolation mode|
-|`status`|`PositionStatus`|The current status of the position (ACTIVE, LIQUIDATED, or CLOSED)|
-
-
-### getAssetDetails
-
-Retrieves detailed information about a listed asset
-
-*Aggregates asset configuration and current state into a single view*
-
-**Notes:**
-- calculations: Uses:
-- getAssetPriceOracle() for current price
-- getBorrowRate() for tier-specific rates
-
-- state-access: Read-only access to:
-- assetInfo mapping
-- totalCollateral mapping
-- tierJumpRate mapping
-- tierLiquidationFee mapping
-
-
-```solidity
-function getAssetDetails(address asset)
-    public
-    view
-    returns (
-        uint256 price,
-        uint256 totalSupplied,
-        uint256 maxSupply,
-        uint256 borrowRate,
-        uint256 liquidationFee,
-        CollateralTier tier
-    );
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|The address of the asset to query|
-
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`price`|`uint256`|Current USD price from oracle|
-|`totalSupplied`|`uint256`|Total amount of asset supplied as collateral|
-|`maxSupply`|`uint256`|Maximum supply threshold allowed|
-|`borrowRate`|`uint256`|Current borrow rate for the asset's tier|
-|`liquidationFee`|`uint256`|Liquidation bonus percentage for the asset's tier|
-|`tier`|`CollateralTier`|Risk classification tier of the asset|
-
-
-### getLPInfo
-
-Retrieves detailed information about a liquidity provider's position
-
-*Calculates real-time LP token value and pending rewards*
-
-**Notes:**
-- calculations: 
-- USDC value = (LP balance * total assets) / total supply
-- Pending rewards = (targetReward * duration) / rewardInterval
-- Rewards capped at ecosystem's maxReward
-
-- validation: Checks:
-- User must meet minimum supply threshold
-- Sufficient time must have elapsed since last accrual
-
-
-```solidity
-function getLPInfo(address user)
-    public
-    view
-    returns (
-        uint256 lpTokenBalance,
-        uint256 usdcValue,
-        uint256 lastAccrualTime,
-        bool isRewardEligible,
-        uint256 pendingRewards
-    );
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|The address of the liquidity provider to query|
-
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`lpTokenBalance`|`uint256`|The user's current balance of LP tokens|
-|`usdcValue`|`uint256`|The current value of LP tokens in USDC|
-|`lastAccrualTime`|`uint256`|Timestamp of last reward accrual|
-|`isRewardEligible`|`bool`|Whether the user is eligible for rewards|
-|`pendingRewards`|`uint256`|Amount of rewards currently available to claim|
+|`<none>`|`bool`|True if the position can be liquidated, false otherwise|
 
 
 ### healthFactor
 
-Calculates the health factor of a borrowing position
+Calculates the health factor of a position
 
-*The health factor represents the ratio of collateral value to debt
-- Health factor > 1: Position is healthy
-- Health factor < 1: Position can be liquidated
-- Health factor = ∞: Position has no debt*
+*Health factor is the ratio of weighted collateral to debt, below 1.0 is liquidatable*
 
-**Notes:**
-- security: Validates position exists via validPosition modifier
-
-- calculations: 
-- For positions with no debt: returns type(uint256).max
-- Otherwise: (collateral value * liquidation threshold) / total debt
-
-- formula: 
-healthFactor = (sum(asset amounts * prices * liquidation thresholds) * WAD) / debt
+**Note:**
+error-cases: 
+- InvalidPosition: Thrown when position doesn't exist
 
 
 ```solidity
@@ -2017,94 +1575,21 @@ function healthFactor(address user, uint256 positionId) public view validPositio
 
 |Name|Type|Description|
 |----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the position to check|
+|`user`|`address`|Address of the position owner|
+|`positionId`|`uint256`|ID of the position to calculate health for|
 
 **Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint256`|uint256 The position's health factor (scaled by WAD)|
-
-
-### getPositionCollateralAssets
-
-Gets the list of collateral assets in a position
-
-*Retrieves the array of asset addresses used as collateral*
-
-**Note:**
-security: Validates position exists via validPosition modifier
-
-
-```solidity
-function getPositionCollateralAssets(address user, uint256 positionId)
-    public
-    view
-    validPosition(user, positionId)
-    returns (address[] memory);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the position to query|
-
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`<none>`|`address[]`|Array of addresses representing collateral assets|
-
-
-### getPositionDebt
-
-Gets the current debt amount for a position
-
-*Returns raw debt amount without accrued interest*
-
-**Notes:**
-- security: Validates position exists via validPosition modifier
-
-- note: For debt including interest, use calculateDebtWithInterest()
-
-
-```solidity
-function getPositionDebt(address user, uint256 positionId)
-    public
-    view
-    validPosition(user, positionId)
-    returns (uint256);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the position to query|
-
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`<none>`|`uint256`|uint256 The principal debt amount|
+|`<none>`|`uint256`|The position's health factor in WAD format (1.0 = 1e6)|
 
 
 ### getUtilization
 
 Calculates the current protocol utilization rate
 
-*Formula: utilization = (totalBorrow * WAD) / totalSuppliedLiquidity*
-
-**Notes:**
-- calculations: 
-- Returns 0 if totalSuppliedLiquidity is 0
-- Returns 0 if totalBorrow is 0
-- Otherwise: (totalBorrow * WAD) / totalSuppliedLiquidity
-
-- formula: 
-utilization = (totalBorrow * 1e18) / totalSuppliedLiquidity
+*Utilization = totalBorrow / totalSuppliedLiquidity, in WAD format*
 
 
 ```solidity
@@ -2114,32 +1599,14 @@ function getUtilization() public view returns (uint256 u);
 
 |Name|Type|Description|
 |----|----|-----------|
-|`u`|`uint256`|Current utilization rate scaled by WAD (1e18)|
+|`u`|`uint256`|The protocol's current utilization rate (0-1e6)|
 
 
 ### getSupplyRate
 
-Calculates the current supply rate for liquidity providers
+Calculates the current supply interest rate for liquidity providers
 
-*Determines the rate based on protocol utilization and profit target*
-
-**Notes:**
-- calculations: 
-- Returns 0 if totalSuppliedLiquidity is 0
-- Target fee = (totalSupply * baseProfitTarget) / WAD
-- Total value = USDC balance + totalBorrow
-- Fee applied if total >= suppliedLiquidity + target
-- Rate = ((WAD * total) / (totalSuppliedLiquidity + fee)) - WAD
-
-- formula: 
-supplyRate = ((totalAssets * WAD) / (totalSuppliedLiquidity + fee)) - WAD
-
-- state-access: Read-only access to:
-- totalSuppliedLiquidity
-- totalSupply
-- baseProfitTarget
-- USDC balance
-- totalBorrow
+*Based on utilization, protocol fees, and available liquidity*
 
 
 ```solidity
@@ -2149,64 +1616,37 @@ function getSupplyRate() public view returns (uint256);
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint256`|uint256 The current supply rate in parts per million (e.g., 0.05e6 = 5%)|
+|`<none>`|`uint256`|The current annual supply interest rate in WAD format|
 
 
 ### getBorrowRate
 
-Calculates the current borrow rate for a specific collateral tier
+Calculates the current borrow interest rate for a specific collateral tier
 
-*Combines base rate, utilization rate, and tier-specific premium*
-
-**Notes:**
-- calculations: 
-- If utilization is 0: returns baseBorrowRate
-- Otherwise calculates:
-1. Supply rate converted to RAY format
-2. Break-even rate based on supply interest
-3. Base rate = max(breakEven + baseProfitTarget, baseBorrowRate)
-4. Final rate = baseRate + (tierRate * utilization / WAD)
-
-- formula: 
-finalRate = baseRate + (tierJumpRate[tier] * utilization / WAD)
-
-- state-access: Read-only access to:
-- baseBorrowRate
-- tierJumpRate mapping
-- utilization rate
+*Based on utilization, base rate, supply rate, and tier-specific jump rate*
 
 
 ```solidity
-function getBorrowRate(CollateralTier tier) public view returns (uint256);
+function getBorrowRate(ILendefiAssets.CollateralTier tier) public view returns (uint256);
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`tier`|`CollateralTier`|The collateral tier to calculate the rate for|
+|`tier`|`ILendefiAssets.CollateralTier`|The collateral tier to calculate the borrow rate for|
 
 **Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint256`|uint256 The current borrow rate in parts per million (e.g., 0.05e6 = 5%)|
+|`<none>`|`uint256`|The current annual borrow interest rate in WAD format|
 
 
 ### isRewardable
 
-Checks if a liquidity provider is eligible for rewards
+Determines if a user is eligible for liquidity provider rewards
 
-*Determines reward eligibility based on time elapsed and supply amount*
-
-**Notes:**
-- validation: Checks:
-- User has previously supplied liquidity (non-zero accrual time)
-- Minimum reward interval has elapsed
-- User meets minimum supply threshold
-
-- calculations: 
-- Base amount = (user LP balance * totalSuppliedLiquidity) / total supply
-- Time check = current time - interval >= last accrual
+*Checks if the required time has passed and minimum supply amount is met*
 
 
 ```solidity
@@ -2216,296 +1656,247 @@ function isRewardable(address user) public view returns (bool);
 
 |Name|Type|Description|
 |----|----|-----------|
-|`user`|`address`|The address of the liquidity provider to check|
+|`user`|`address`|Address of the user to check for reward eligibility|
 
 **Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`bool`|bool True if the user is eligible for rewards, false otherwise|
+|`<none>`|`bool`|True if the user is eligible for rewards, false otherwise|
 
 
-### getTierLiquidationFee
+### getPositionTier
 
-Gets the base liquidation bonus percentage for a specific collateral tier
+Determines the collateral tier of a position
 
-*Direct accessor for tierLiquidationFee mapping without additional calculations*
-
-**Note:**
-values: Typical values:
-- STABLE: 5% (0.05e6)
-- CROSS_A: 8% (0.08e6)
-- CROSS_B: 10% (0.1e6)
-- ISOLATED: 15% (0.15e6)
+*For cross-collateral positions, returns the highest risk tier among assets*
 
 
 ```solidity
-function getTierLiquidationFee(CollateralTier tier) public view returns (uint256);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`tier`|`CollateralTier`|The collateral tier to query|
-
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`<none>`|`uint256`|uint256 The liquidation bonus rate in parts per million (e.g., 0.05e6 = 5%)|
-
-
-### getHighestTier
-
-Determines the highest risk tier among a position's collateral assets
-
-*Iterates through position's assets and compares their tiers*
-
-**Notes:**
-- security: Validates position exists via validPosition modifier
-
-- validation: Checks:
-- Only considers assets with non-zero balances
-
-- calculations: 
-- Default tier is STABLE (lowest risk)
-- Compares tier enum values numerically
-- Higher enum value = higher risk tier
-
-- tiers: Risk tiers in ascending order:
-- STABLE (0)
-- CROSS_A (1)
-- CROSS_B (2)
-- ISOLATED (3)
-
-
-```solidity
-function getHighestTier(address user, uint256 positionId)
+function getPositionTier(address user, uint256 positionId)
     public
     view
     validPosition(user, positionId)
-    returns (CollateralTier);
+    returns (ILendefiAssets.CollateralTier);
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`user`|`address`|The address of the position owner|
-|`positionId`|`uint256`|The ID of the position to check|
+|`user`|`address`|Address of the position owner|
+|`positionId`|`uint256`|ID of the position to check|
 
 **Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`CollateralTier`|CollateralTier The highest risk tier found among active collateral|
+|`<none>`|`ILendefiAssets.CollateralTier`|The position's collateral tier (STABLE, CROSS_A, CROSS_B, or ISOLATED)|
 
 
-### balanceOf
+### _processDeposit
 
-Gets the token balance of an account
+Processes collateral deposit operations with validation and state updates
 
-*Overrides ERC20Upgradeable and IERC20 implementations*
-
-
-```solidity
-function balanceOf(address account) public view virtual override(ERC20Upgradeable, IERC20) returns (uint256);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`account`|`address`|The address to query|
-
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`<none>`|`uint256`|uint256 The number of tokens owned by the account|
-
-
-### decimals
-
-Returns the number of decimals used for token amounts
-
-*Overrides ERC20Upgradeable implementation*
-
-
-```solidity
-function decimals() public view virtual override(ERC20Upgradeable) returns (uint8);
-```
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`<none>`|`uint8`|uint8 The number of decimals (18)|
-
-
-### totalSupply
-
-Gets the total supply of tokens in circulation
-
-*Overrides ERC20Upgradeable and IERC20 implementations*
-
-
-```solidity
-function totalSupply() public view virtual override(ERC20Upgradeable, IERC20) returns (uint256);
-```
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`<none>`|`uint256`|uint256 The total number of tokens|
-
-
-### _transferCollateralToLiquidator
-
-Internal function to transfer all collateral assets from a liquidated position
-
-*Iterates through all position assets and transfers non-zero balances*
+*Internal function that handles the core logic for adding collateral to a position,
+enforcing protocol rules about isolation mode, asset capacity limits, and asset counts.
+This function is called by both supplyCollateral and interpositionalTransfer.
+The function performs several validations to ensure the deposit complies with
+protocol rules:
+1. Verifies the asset hasn't reached its global capacity limit
+2. Enforces isolation mode rules (isolated assets can't be added to cross positions)
+3. Ensures isolated positions only contain a single asset type
+4. Limits positions to a maximum of 20 different asset types*
 
 **Notes:**
-- state: Updates:
-- Clears collateral amounts in position
-- Updates total collateral tracking
-- Deletes position assets array
+- requirements: 
+- Asset must be whitelisted in the protocol (validated by validAsset modifier)
+- Position must exist and be in ACTIVE status (validated by activePosition modifier)
+- Asset must not be at its global capacity limit
+- For isolated assets: position must not be a cross-collateral position
+- For isolated positions: asset must match the position's initial asset (if any exists)
+- Position must have fewer than 20 different asset types (if adding a new asset type)
 
-- events: Emits:
-- WithdrawCollateral for each asset transferred
+- state-changes: 
+- Adds asset to positionCollateralAssets[msg.sender][positionId] if not already present
+- Increases positionCollateralAmounts[msg.sender][positionId][asset] by amount
+- Increases global assetTVL[asset] by amount
 
+- emits: 
+- TVLUpdated(asset, newTVL)
 
-```solidity
-function _transferCollateralToLiquidator(address user, uint256 positionId, address liquidator) internal;
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|Address of the position owner|
-|`positionId`|`uint256`|ID of the position being liquidated|
-|`liquidator`|`address`|Address receiving the collateral assets|
-
-
-### _rewardInternal
-
-Internal function to process and distribute rewards for liquidity providers
-
-*Calculates and distributes rewards based on time elapsed and amount supplied*
-
-**Notes:**
-- validation: Checks:
-- Sufficient time has elapsed since last reward (>= rewardInterval)
-- Amount meets minimum threshold (>= rewardableSupply)
-
-- calculations: 
-- Duration = current timestamp - last accrual time
-- Base reward = (targetReward * duration) / rewardInterval
-- Final reward = min(base reward, ecosystem maxReward)
-
-- state: Updates:
-- Clears liquidityAccrueTimeIndex for user
-
-- events: Emits:
-- Reward event with recipient and amount
-
-- security: Only called internally during liquidity operations
+- error-cases: 
+- NotListed: Thrown when asset is not whitelisted
+- InvalidPosition: Thrown when position doesn't exist
+- InactivePosition: Thrown when position is not in ACTIVE status
+- AssetCapacityReached: Thrown when asset has reached its global capacity limit
+- IsolatedAssetViolation: Thrown when supplying isolated-tier asset to a cross position
+- InvalidAssetForIsolation: Thrown when asset doesn't match isolated position's asset
+- MaximumAssetsReached: Thrown when position already has 20 different asset types
 
 
 ```solidity
-function _rewardInternal(uint256 amount) internal;
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`amount`|`uint256`|The amount of liquidity being withdrawn or managed|
-
-
-### _checkIsolationConstraints
-
-Checks isolation constraints for interpositional transfers
-
-*Prevents transfers involving isolated positions as they have special collateral restrictions*
-
-
-```solidity
-function _checkIsolationConstraints(address user, uint256 sourceId, uint256 targetId) internal view returns (bool);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|Address of the position owner|
-|`sourceId`|`uint256`|ID of the source position|
-|`targetId`|`uint256`|ID of the destination position|
-
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`<none>`|`bool`|bool True if either position is isolated (transfers not allowed)|
-
-
-### _validateAndReduceSourceCollateral
-
-Validates and reduces source collateral, ensuring position remains adequately collateralized
-
-*Combines balance checking, collateral reduction, and collateralization validation in one function*
-
-**Notes:**
-- error: InsufficientCollateralBalance if amount exceeds available balance
-
-- error: WithdrawalExceedsCreditLimit if remaining collateral doesn't support debt
-
-
-```solidity
-function _validateAndReduceSourceCollateral(address user, uint256 positionId, address asset, uint256 amount) internal;
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|Address of the position owner|
-|`positionId`|`uint256`|ID of the source position|
-|`asset`|`address`|Address of the collateral asset|
-|`amount`|`uint256`|Amount of the asset to transfer|
-
-
-### _updateTargetPosition
-
-Updates target position with transferred collateral
-
-*Adds the asset to the position's set if not present and increases balance*
-
-**Note:**
-error: TooManyAssets if position would exceed 20 assets limit
-
-
-```solidity
-function _updateTargetPosition(address user, uint256 positionId, address asset, uint256 amount) internal;
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|Address of the position owner|
-|`positionId`|`uint256`|ID of the destination position|
-|`asset`|`address`|Address of the collateral asset|
-|`amount`|`uint256`|Amount of the asset to transfer|
-
-
-### _update
-
-
-```solidity
-function _update(address from, address to, uint256 value)
+function _processDeposit(address asset, uint256 amount, uint256 positionId)
     internal
-    override(ERC20Upgradeable, ERC20PausableUpgradeable);
+    validAsset(asset)
+    activePosition(msg.sender, positionId);
 ```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`asset`|`address`|Address of the collateral asset to deposit|
+|`amount`|`uint256`|Amount of the asset to deposit (in the asset's native units)|
+|`positionId`|`uint256`|ID of the position to receive the collateral|
+
+
+### _processWithdrawal
+
+Processes a collateral withdrawal operation with validation and state updates
+
+*Internal function that handles the core logic for removing collateral from a position,
+enforcing position solvency and validating withdrawal amounts.
+This function is called by both withdrawCollateral and interpositionalTransfer.
+The function performs several validations to ensure the withdrawal complies with
+protocol rules:
+1. For isolated positions, verifies the asset matches the position's designated asset
+2. Checks that the position has sufficient balance of the asset
+3. Updates the position's collateral tracking based on withdrawal amount
+4. Ensures the position remains sufficiently collateralized after withdrawal*
+
+**Notes:**
+- requirements: 
+- Position must exist and be in ACTIVE status (validated by activePosition modifier)
+- For isolated positions: asset must match the position's designated asset
+- Position must have sufficient balance of the specified asset
+- After withdrawal, position must maintain sufficient collateral for any outstanding debt
+
+- state-changes: 
+- Decreases positionCollateralAmounts[msg.sender][positionId][asset] by amount
+- For non-isolated positions: Removes asset entirely if balance becomes zero
+- Decreases global assetTVL[asset] by amount
+
+- emits: 
+- TVLUpdated(asset, newTVL)
+
+- error-cases: 
+- InvalidAssetForIsolation: Thrown when trying to withdraw an asset that doesn't match the isolated position's asset
+- LowBalance: Thrown when position doesn't have sufficient balance of the asset
+- CreditLimitExceeded: Thrown when withdrawal would leave position undercollateralized
+
+
+```solidity
+function _processWithdrawal(address asset, uint256 amount, uint256 positionId)
+    internal
+    activePosition(msg.sender, positionId);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`asset`|`address`|Address of the collateral asset to withdraw|
+|`amount`|`uint256`|Amount of the asset to withdraw (in the asset's native units)|
+|`positionId`|`uint256`|ID of the position to withdraw from|
+
+
+### _processRepay
+
+Processes a repayment for a position and handles debt accounting
+
+*This internal function manages all debt-related state changes during repayment:
+1. Calculates the up-to-date debt including accrued interest
+2. Tracks interest accrued since last update
+3. Determines the actual amount to repay (capped at outstanding debt)
+4. Updates the protocol's total debt accounting
+5. Updates the position's debt and interest accrual timestamp
+6. Emits relevant events
+The function handles two key scenarios:
+- Partial repayment: When proposedAmount < balance, repays that exact amount
+- Full repayment: When proposedAmount >= balance, repays exactly the outstanding balance*
+
+**Notes:**
+- accounting: When calculating updated totalBorrow, the formula:
+totalBorrow + (balance - actualAmount) - position.debtAmount
+takes into account both newly accrued interest and the repayment amount
+
+- events: Emits:
+- Repay(msg.sender, positionId, actualAmount)
+- InterestAccrued(msg.sender, positionId, accruedInterest)
+
+
+```solidity
+function _processRepay(uint256 positionId, uint256 proposedAmount, UserPosition storage position)
+    internal
+    validAmount(proposedAmount)
+    returns (uint256 actualAmount);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`positionId`|`uint256`|The ID of the position being repaid|
+|`proposedAmount`|`uint256`|The amount the user is offering to repay (uncapped)|
+|`position`|`UserPosition`||
+
+**Returns**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`actualAmount`|`uint256`|The actual amount that should be transferred from the user, which is the lesser of proposedAmount and the outstanding debt|
+
+
+### _withdrawAllCollateral
+
+Withdraws all collateral assets from a position to a specified recipient
+
+*Internal function used during position closure and liquidation to remove and transfer
+all collateral assets from a position. Iterates through all assets in the position,
+clears them from the position's storage, and transfers them to the recipient.
+The function handles the complete extraction of all assets regardless of the position's
+state or collateralization ratio, and is intended for use only in terminal operations
+like complete position closure or liquidation.*
+
+**Notes:**
+- state-changes: 
+- Clears all assets from the position's collateral mapping
+- Updates assetTVL for each asset withdrawn
+- Transfers all assets to the recipient
+
+- emits: 
+- WithdrawCollateral(owner, positionId, asset, amount) for each asset
+- TVLUpdated(asset, newTVL) for each asset
+
+
+```solidity
+function _withdrawAllCollateral(address owner, uint256 positionId, address recipient) internal;
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`owner`|`address`|Address of the position owner|
+|`positionId`|`uint256`|ID of the position to withdraw all collateral from|
+|`recipient`|`address`|Address that will receive the withdrawn collateral assets|
+
 
 ### _authorizeUpgrade
+
+Authorizes an upgrade to a new implementation contract
+
+*Increments the contract version and emits an event*
+
+**Notes:**
+- access-control: Restricted to UPGRADER_ROLE
+
+- events: Emits an Upgrade event
 
 
 ```solidity
 function _authorizeUpgrade(address newImplementation) internal override onlyRole(UPGRADER_ROLE);
 ```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`newImplementation`|`address`|Address of the new implementation contract|
+
 
