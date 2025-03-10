@@ -26,7 +26,7 @@ This security audit evaluates the Lendefi Protocol, a sophisticated lending plat
 The protocol now implements a hard cap of 1000 positions per user, effectively preventing potential Denial-of-Service (DoS) attacks:
 ```solidity
 function createPosition(address asset, bool isIsolated) external validAsset(asset) nonReentrant whenNotPaused {
-    require(positions[msg.sender].length < 1000, "MPL"); // Max position limit
+    if (positions[msg.sender].length >= 1000) revert MaxPositionLimitReached(); // Max position limit
     // ...position creation logic...
 }
 ```
