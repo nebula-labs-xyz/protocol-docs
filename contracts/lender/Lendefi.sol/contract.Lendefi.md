@@ -1,11 +1,58 @@
 # Lendefi
-[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/7882024792b94909a5d6c51ec494855406aaf294/contracts/lender/Lendefi.sol)
+[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/a5a218c0db8bfb52cb836dc7d721fd999f5de3c1/contracts/lender/Lendefi.sol)
 
 **Inherits:**
 [IPROTOCOL](/contracts/interfaces/IProtocol.sol/interface.IPROTOCOL.md), PausableUpgradeable, AccessControlUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable
 
 **Author:**
 alexei@nebula-labs(dot)xyz
+
+An efficient monolithic lending protocol
+
+*Implements a secure and upgradeable collateralized lending protocol with Yield Token*
+
+**Notes:**
+- security-contact: security@nebula-labs.xyz
+
+- copyright: Copyright (c) 2025 Nebula Holding Inc. All rights reserved.
+Core Features:
+- Lending and borrowing with multiple collateral tiers
+- Isolated and cross-collateral positions
+- Dynamic interest rates based on utilization
+- Flash loans with configurable fees
+- Liquidation mechanism with tier-based bonuses
+- Liquidity provider rewards system
+- Price oracle integration with safety checks
+Security Features:
+- Role-based access control
+- Pausable functionality
+- Non-reentrant operations
+- Upgradeable contract pattern
+- Oracle price validation
+- Supply and debt caps
+
+- roles: 
+- DEFAULT_ADMIN_ROLE: Contract administration
+- PAUSER_ROLE: Emergency pause/unpause
+- MANAGER_ROLE: Protocol parameter updates
+- UPGRADER_ROLE: Contract upgrades
+
+- tiers: Collateral tiers in ascending order of risk:
+- STABLE: Lowest risk, stablecoins
+- CROSS_A: Low risk assets
+- CROSS_B: Medium risk assets
+- ISOLATED: High risk assets
+
+- inheritance: 
+- IPROTOCOL: Protocol interface
+- PausableUpgradeable: Pausable token operations
+- AccessControlUpgradeable: Role-based access
+- ReentrancyGuardUpgradeable: Reentrancy protection
+- UUPSUpgradeable: Upgrade pattern
+- LendefiRates: Interest calculations
+
+- oz-upgrades: 
+
 
 ## State Variables
 ### WAD
@@ -46,6 +93,17 @@ bytes32 internal constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
 ```
 
 
+### UPGRADE_TIMELOCK_DURATION
+Duration of the timelock for upgrade operations (3 days)
+
+*Provides time for users to review and react to scheduled upgrades*
+
+
+```solidity
+uint256 public constant UPGRADE_TIMELOCK_DURATION = 3 days;
+```
+
+
 ### usdcInstance
 *Reference to the USDC stablecoin contract used for lending/borrowing*
 
@@ -78,7 +136,7 @@ IECOSYSTEM internal ecosystemInstance;
 
 
 ```solidity
-ILendefiYieldToken internal yieldTokenInstance;
+IYIELDTOKEN internal yieldTokenInstance;
 ```
 
 
@@ -87,7 +145,7 @@ ILendefiYieldToken internal yieldTokenInstance;
 
 
 ```solidity
-ILendefiAssets internal assetsModule;
+IASSETS internal assetsModule;
 ```
 
 
@@ -127,69 +185,6 @@ uint256 public totalAccruedSupplierInterest;
 ```
 
 
-### targetReward
-Target amount of governance tokens for LP rewards per interval
-
-
-```solidity
-uint256 public targetReward;
-```
-
-
-### rewardInterval
-Time period for LP reward eligibility in seconds
-
-
-```solidity
-uint256 public rewardInterval;
-```
-
-
-### rewardableSupply
-Minimum supply amount required for reward eligibility (in USDC)
-
-
-```solidity
-uint256 public rewardableSupply;
-```
-
-
-### baseBorrowRate
-Base annual interest rate for borrowing (in WAD format)
-
-
-```solidity
-uint256 public baseBorrowRate;
-```
-
-
-### baseProfitTarget
-Target profit rate for the protocol (in WAD format)
-
-
-```solidity
-uint256 public baseProfitTarget;
-```
-
-
-### liquidatorThreshold
-Minimum governance token balance required to perform liquidations
-
-
-```solidity
-uint256 public liquidatorThreshold;
-```
-
-
-### flashLoanFee
-Fee percentage charged for flash loans (in basis points)
-
-
-```solidity
-uint256 public flashLoanFee;
-```
-
-
 ### totalFlashLoanFees
 Total fees collected from flash loans since protocol inception
 
@@ -214,6 +209,24 @@ Address of the treasury that receives protocol fees
 
 ```solidity
 address public treasury;
+```
+
+
+### mainConfig
+Protocol configuration parameters
+
+
+```solidity
+ProtocolConfig public mainConfig;
+```
+
+
+### pendingUpgrade
+Information about the currently pending upgrade
+
+
+```solidity
+UpgradeRequest public pendingUpgrade;
 ```
 
 
@@ -264,7 +277,7 @@ mapping(address src => uint256 time) internal liquidityAccrueTimeIndex;
 
 
 ```solidity
-uint256[20] private __gap;
+uint256[30] private __gap;
 ```
 
 
@@ -362,7 +375,7 @@ function initialize(
     address timelock_,
     address yieldToken,
     address assetsModule_,
-    address guardian
+    address multisig
 ) external initializer;
 ```
 **Parameters**
@@ -376,7 +389,7 @@ function initialize(
 |`timelock_`|`address`|Address of the timelock contract for governance actions|
 |`yieldToken`|`address`|Address of the yield token (LP token) contract|
 |`assetsModule_`|`address`|Address of the assets module for managing supported collateral|
-|`guardian`|`address`|Address of the protocol guardian with emergency powers|
+|`multisig`|`address`|Address of the protocol multisig with emergency powers|
 
 
 ### pause
@@ -464,31 +477,6 @@ function flashLoan(address receiver, uint256 amount, bytes calldata params)
 |`receiver`|`address`|Address of the contract receiving and handling the flash loan|
 |`amount`|`uint256`|Amount of USDC to borrow|
 |`params`|`bytes`|Arbitrary data to pass to the receiver for execution context|
-
-
-### updateFlashLoanFee
-
-Updates the fee percentage charged for flash loans
-
-*Fee is expressed in basis points (e.g., 10 = 0.1%)*
-
-**Notes:**
-- access-control: Restricted to MANAGER_ROLE
-
-- events: Emits an UpdateFlashLoanFee event
-
-- error-cases: 
-- InvalidFee: Thrown when fee exceeds the maximum allowed (100 basis points)
-
-
-```solidity
-function updateFlashLoanFee(uint256 newFee) external onlyRole(MANAGER_ROLE);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`newFee`|`uint256`|New flash loan fee in basis points, capped at 1% (100 basis points)|
 
 
 ### supplyLiquidity
@@ -1056,16 +1044,16 @@ function interpositionalTransfer(uint256 fromPositionId, uint256 toPositionId, a
 |`amount`|`uint256`|The amount of the asset to transfer|
 
 
-### updateProtocolMetrics
+### loadProtocolConfig
 
-Updates multiple protocol parameters in a single transaction
+Updates protocol parameters from a configuration struct
 
-*All parameters are validated against minimum or maximum constraints*
+*Validates all parameters against minimum/maximum constraints before applying*
 
 **Notes:**
 - access-control: Restricted to MANAGER_ROLE
 
-- events: Emits a ProtocolMetricsUpdated event
+- events: Emits a ProtocolConfigUpdated event
 
 - error-cases: 
 - InvalidProfitTarget: Thrown when profit target rate is below minimum
@@ -1074,28 +1062,78 @@ Updates multiple protocol parameters in a single transaction
 - InvalidInterval: Thrown when interval is below minimum
 - InvalidSupplyAmount: Thrown when supply amount is below minimum
 - InvalidLiquidatorThreshold: Thrown when liquidator threshold is below minimum
+- InvalidFee: Thrown when flash loan fee exceeds maximum
 
 
 ```solidity
-function updateProtocolMetrics(
-    uint256 profitTargetRate,
-    uint256 borrowRate,
-    uint256 rewardAmount,
-    uint256 interval,
-    uint256 supplyAmount,
-    uint256 liquidatorAmount
-) external onlyRole(MANAGER_ROLE);
+function loadProtocolConfig(ProtocolConfig calldata config) external onlyRole(MANAGER_ROLE);
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`profitTargetRate`|`uint256`|New base profit target rate (min 0.25%)|
-|`borrowRate`|`uint256`|New base borrow rate (min 1%)|
-|`rewardAmount`|`uint256`|New target reward amount (max 10,000 tokens)|
-|`interval`|`uint256`|New reward interval in seconds (min 90 days)|
-|`supplyAmount`|`uint256`|New minimum rewardable supply amount (min 20,000 USDC)|
-|`liquidatorAmount`|`uint256`|New minimum liquidator token threshold (min 10 tokens)|
+|`config`|`ProtocolConfig`|The new protocol configuration to apply|
+
+
+### resetProtocolConfig
+
+Resets protocol parameters to default values
+
+*Reverts all configuration parameters to conservative default values*
+
+**Notes:**
+- access-control: Restricted to MANAGER_ROLE
+
+- events: Emits a ProtocolConfigReset event
+
+
+```solidity
+function resetProtocolConfig() external onlyRole(MANAGER_ROLE);
+```
+
+### scheduleUpgrade
+
+Schedules an upgrade to a new implementation with timelock
+
+*Only callable by addresses with UPGRADER_ROLE*
+
+
+```solidity
+function scheduleUpgrade(address newImplementation) external onlyRole(UPGRADER_ROLE);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`newImplementation`|`address`|Address of the new implementation contract|
+
+
+### cancelUpgrade
+
+Cancels a previously scheduled upgrade
+
+*Only callable by addresses with UPGRADER_ROLE*
+
+
+```solidity
+function cancelUpgrade() external onlyRole(UPGRADER_ROLE);
+```
+
+### upgradeTimelockRemaining
+
+Returns the remaining time before a scheduled upgrade can be executed
+
+*Returns 0 if no upgrade is scheduled or if the timelock has expired*
+
+
+```solidity
+function upgradeTimelockRemaining() external view returns (uint256);
+```
+**Returns**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`<none>`|`uint256`|timeRemaining The time remaining in seconds|
 
 
 ### getUserPosition
@@ -1176,7 +1214,7 @@ function getPositionCollateralAssets(address user, uint256 positionId)
     external
     view
     validPosition(user, positionId)
-    returns (address[] memory);
+    returns (address[] memory assets);
 ```
 **Parameters**
 
@@ -1189,7 +1227,7 @@ function getPositionCollateralAssets(address user, uint256 positionId)
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`address[]`|Array of addresses representing all collateral assets in the position|
+|`assets`|`address[]`|Array of addresses representing all collateral assets in the position|
 
 
 ### getLiquidityAccrueTimeIndex
@@ -1332,7 +1370,7 @@ function calculateCreditLimit(address user, uint256 positionId)
     public
     view
     validPosition(user, positionId)
-    returns (uint256);
+    returns (uint256 credit);
 ```
 **Parameters**
 
@@ -1345,7 +1383,7 @@ function calculateCreditLimit(address user, uint256 positionId)
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint256`|credit - The maximum amount of USDC that can be borrowed against the position|
+|`credit`|`uint256`|- The maximum amount of USDC that can be borrowed against the position|
 
 
 ### calculateCollateralValue
@@ -1470,13 +1508,13 @@ Calculates the current borrow interest rate for a specific collateral tier
 
 
 ```solidity
-function getBorrowRate(ILendefiAssets.CollateralTier tier) public view returns (uint256);
+function getBorrowRate(IASSETS.CollateralTier tier) public view returns (uint256);
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`tier`|`ILendefiAssets.CollateralTier`|The collateral tier to calculate the borrow rate for|
+|`tier`|`IASSETS.CollateralTier`|The collateral tier to calculate the borrow rate for|
 
 **Returns**
 
@@ -1520,7 +1558,7 @@ function getPositionTier(address user, uint256 positionId)
     public
     view
     validPosition(user, positionId)
-    returns (ILendefiAssets.CollateralTier);
+    returns (IASSETS.CollateralTier tier);
 ```
 **Parameters**
 
@@ -1533,8 +1571,15 @@ function getPositionTier(address user, uint256 positionId)
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`ILendefiAssets.CollateralTier`|The position's collateral tier (STABLE, CROSS_A, CROSS_B, or ISOLATED)|
+|`tier`|`IASSETS.CollateralTier`|The position's collateral tier (STABLE, CROSS_A, CROSS_B, or ISOLATED)|
 
+
+### getConfig
+
+
+```solidity
+function getConfig() external view returns (ProtocolConfig memory);
+```
 
 ### _processDeposit
 
@@ -1723,14 +1768,9 @@ function _withdrawAllCollateral(address owner, uint256 positionId, address recip
 
 ### _authorizeUpgrade
 
-Authorizes an upgrade to a new implementation contract
+Authorizes an upgrade to a new implementation
 
-*Increments the contract version and emits an event*
-
-**Notes:**
-- access-control: Restricted to UPGRADER_ROLE
-
-- events: Emits an Upgrade event
+*Implements the upgrade verification and authorization logic*
 
 
 ```solidity
@@ -1740,6 +1780,6 @@ function _authorizeUpgrade(address newImplementation) internal override onlyRole
 
 |Name|Type|Description|
 |----|----|-----------|
-|`newImplementation`|`address`|Address of the new implementation contract|
+|`newImplementation`|`address`|Address of new implementation contract|
 
 
