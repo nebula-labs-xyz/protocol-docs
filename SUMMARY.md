@@ -43,14 +43,11 @@
     - [LendefiYieldToken](contracts/lender/LendefiYieldToken.sol/contract.LendefiYieldToken.md)
   - [❱ liquidator](contracts/liquidator/README.md)
     - [FlashLoanRecipient](contracts/liquidator/Liquidator.sol/contract.FlashLoanRecipient.md)
-  - [❱ oracle](contracts/oracle/README.md)
-    - [LendefiOracle](contracts/oracle/LendefiOracle.sol/contract.LendefiOracle.md)
   - [❱ audit](audit/README.md)
     - [Audit](audit/audit/Audit.md)
     - [Extended Audit](audit/extendedAudit/AuditExtended.md)
     - [Functions](audit/functions/Functions.md)
     - [Liquidation](audit/liquidation/Liquidation.md)
-    - [Oracle Module](audit/oracle/Oracle.md)
     - [Position Lifecycle](audit/positionLifecycle/PositionLifecycle.md)
 
 
