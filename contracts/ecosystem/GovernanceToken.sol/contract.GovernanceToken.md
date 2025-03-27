@@ -1,74 +1,5 @@
 # GovernanceToken
-[Git Source](https://github.com/nebula-labs-xyz/lendefi-dao/blob/07f5cb7369219dbffd648091ffbddb6d70a0157c/contracts/ecosystem/GovernanceToken.sol)
-
-## Overview
-The GovernanceToken contract implements the core token functionality for the Lendefi DAO ecosystem, serving as both a governance instrument and a bridgeable asset. It leverages OpenZeppelin's upgradeable contract framework and incorporates multiple token standards and security features.
-
-## Architecture Analysis
-
-### Contract Structure
-- **Extensive inheritance**: Combines seven OpenZeppelin upgradeable contracts to provide comprehensive functionality
-- **UUPS upgradeability pattern**: Implements the Universal Upgradeable Proxy Standard for future upgrades
-- **Role-based access control**: Uses AccessControl for permission management
-- **Governance features**: Incorporates ERC20Votes for on-chain governance
-
-### Token Economics
-- **Fixed supply model**: 50M tokens total supply
-- **Predetermined distribution**:
-  - 56% allocated to treasury
-  - 44% allocated to ecosystem
-- **Bridge mechanism**: Supports cross-chain functionality with safety limits (20K tokens max per bridge transaction)
-- **Two-phase initialization**: Separates contract setup from token generation event
-
-## Technical Assessment
-
-### Strengths
-
-1. **Security features**:
-   - Role-based permission system with specialized roles
-   - Pausability for emergency situations
-   - Bridge transaction size limits
-   - One-time TGE initialization protection
-   - Proper supply cap enforcement in bridge minting
-
-2. **Governance capabilities**:
-   - Full ERC20Votes implementation for governance participation
-   - Permit functionality for gasless approvals
-   - Checkpoints for vote delegation
-
-3. **Upgrade safety**:
-   - Version tracking via the version variable
-   - Storage gap for future extension
-   - Restricted upgrade authorization
-   - Event emissions for upgrade transparency
-
-4. **Cross-chain design**:
-   - Bridge functionality with safety limits
-   - Supply preservation across chains
-
-### Potential Concerns
-
-1. **Centralization risks**:
-   - Admin role has significant control (DEFAULT_ADMIN_ROLE)
-   - No time-locks or multi-signature requirements for sensitive operations
-
-2. **Bridge functionality**:
-   - No mechanism to pause only bridge operations in emergency
-   - No clear recovery path for failed bridge transactions
-   - Fixed bridge limit with no adjustment mechanism
-
-3. **Initial distribution**:
-   - No vesting for initial token distribution
-   - All tokens are immediately liquid at TGE
-
-## Code Quality Assessment
-
-- **Documentation**: Good NatSpec documentation for most functions and parameters
-- **Error handling**: Proper use of custom errors with descriptive messages
-- **Event emissions**: Comprehensive event logging for important state changes
-- **Variable naming**: Clear and descriptive naming conventions
-- **Gas optimization**: Standard OpenZeppelin patterns with reasonable efficiency
-
+[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/d0b15d8d57415f38e3db367bb9e72ba910580c33/contracts/ecosystem/GovernanceToken.sol)
 
 **Inherits:**
 ERC20Upgradeable, ERC20BurnableUpgradeable, ERC20PausableUpgradeable, AccessControlUpgradeable, ERC20PermitUpgradeable, ERC20VotesUpgradeable, UUPSUpgradeable
@@ -93,30 +24,53 @@ uint256 private constant INITIAL_SUPPLY = 50_000_000 ether;
 ```
 
 
-### MAX_BRIDGE_AMOUNT
+### DEFAULT_MAX_BRIDGE_AMOUNT
 
 ```solidity
-uint256 private constant MAX_BRIDGE_AMOUNT = 20_000 ether;
+uint256 private constant DEFAULT_MAX_BRIDGE_AMOUNT = 5_000 ether;
 ```
 
 
 ### TREASURY_SHARE
 
 ```solidity
-uint256 private constant TREASURY_SHARE = 56;
+uint256 private constant TREASURY_SHARE = 27_400_000 ether;
 ```
 
 
 ### ECOSYSTEM_SHARE
 
 ```solidity
-uint256 private constant ECOSYSTEM_SHARE = 44;
+uint256 private constant ECOSYSTEM_SHARE = 22_000_000 ether;
+```
+
+
+### DEPLOYER_SHARE
+
+```solidity
+uint256 private constant DEPLOYER_SHARE = 600_000 ether;
+```
+
+
+### UPGRADE_TIMELOCK_DURATION
+Upgrade timelock duration (in seconds)
+
+
+```solidity
+uint256 private constant UPGRADE_TIMELOCK_DURATION = 3 days;
+```
+
+
+### TGE_ROLE
+*AccessControl Role Constants*
+
+
+```solidity
+bytes32 internal constant TGE_ROLE = keccak256("TGE_ROLE");
 ```
 
 
 ### PAUSER_ROLE
-*AccessControl Pauser Role*
-
 
 ```solidity
 bytes32 internal constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
@@ -124,8 +78,6 @@ bytes32 internal constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
 
 ### BRIDGE_ROLE
-*AccessControl Bridge Role*
-
 
 ```solidity
 bytes32 internal constant BRIDGE_ROLE = keccak256("BRIDGE_ROLE");
@@ -133,11 +85,16 @@ bytes32 internal constant BRIDGE_ROLE = keccak256("BRIDGE_ROLE");
 
 
 ### UPGRADER_ROLE
-*AccessControl Upgrader Role*
-
 
 ```solidity
 bytes32 internal constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
+```
+
+
+### MANAGER_ROLE
+
+```solidity
+bytes32 internal constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
 ```
 
 
@@ -177,14 +134,53 @@ uint32 public tge;
 ```
 
 
-### __gap
+### pendingUpgrade
 
 ```solidity
-uint256[50] private __gap;
+UpgradeRequest public pendingUpgrade;
+```
+
+
+### __gap
+*Storage gap for future upgrades*
+
+
+```solidity
+uint256[48] private __gap;
 ```
 
 
 ## Functions
+### nonZeroAmount
+
+*Modifier to check for non-zero amounts*
+
+
+```solidity
+modifier nonZeroAmount(uint256 amount);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`amount`|`uint256`|The amount to validate|
+
+
+### nonZeroAddress
+
+*Modifier to check for non-zero addresses*
+
+
+```solidity
+modifier nonZeroAddress(address addr);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`addr`|`address`|The address to validate|
+
+
 ### constructor
 
 **Note:**
@@ -209,21 +205,42 @@ Sets up the initial state of the contract, including roles and token supplies.
 *Initializes the UUPS contract.*
 
 **Notes:**
-- requires: The guardian address must not be zero.
+- requires: The addresses must not be zero.
 
 - events-emits: [Initialized](/contracts/ecosystem/GovernanceToken.sol/contract.GovernanceToken.md#initialized) event.
 
-- throws: ZeroAddress if the guardian address is zero.
+- throws: ZeroAddress if any address is zero.
 
 
 ```solidity
-function initializeUUPS(address guardian) external initializer;
+function initializeUUPS(address guardian, address timelock) external initializer;
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
 |`guardian`|`address`|The address of the guardian (admin).|
+|`timelock`|`address`|The address of the timelock controller.|
+
+
+### setBridgeAddress
+
+*Sets the bridge address with BRIDGE_ROLE*
+
+**Notes:**
+- requires-role: MANAGER_ROLE
+
+- throws: ZeroAddress if bridgeAddress is zero
+
+
+```solidity
+function setBridgeAddress(address bridgeAddress) external onlyRole(MANAGER_ROLE);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`bridgeAddress`|`address`|The address of the bridge contract|
 
 
 ### initializeTGE
@@ -245,7 +262,7 @@ Sets up the initial token distribution between the ecosystem and treasury contra
 
 
 ```solidity
-function initializeTGE(address ecosystem, address treasury) external onlyRole(DEFAULT_ADMIN_ROLE);
+function initializeTGE(address ecosystem, address treasury) external onlyRole(TGE_ROLE);
 ```
 **Parameters**
 
@@ -300,9 +317,7 @@ Can only be called by the official Bridge contract
 
 - requires: to address must not be zero
 
-- requires: amount must not be zero
-
-- requires: amount must not exceed maxBridge limit
+- requires: amount must not be zero or exceed maxBridge limit
 
 - events-emits: [BridgeMint](/contracts/ecosystem/GovernanceToken.sol/contract.GovernanceToken.md#bridgemint) event
 
@@ -316,7 +331,12 @@ Can only be called by the official Bridge contract
 
 
 ```solidity
-function bridgeMint(address to, uint256 amount) external whenNotPaused onlyRole(BRIDGE_ROLE);
+function bridgeMint(address to, uint256 amount)
+    external
+    nonZeroAddress(to)
+    nonZeroAmount(amount)
+    whenNotPaused
+    onlyRole(BRIDGE_ROLE);
 ```
 **Parameters**
 
@@ -328,28 +348,83 @@ function bridgeMint(address to, uint256 amount) external whenNotPaused onlyRole(
 
 ### updateMaxBridgeAmount
 
-Only callable by admin role
+Only callable by manager role
 
 *Updates the maximum allowed bridge amount per transaction*
 
 **Notes:**
-- requires-role: DEFAULT_ADMIN_ROLE
+- requires-role: MANAGER_ROLE
 
-- requires: New amount must be greater than zero
+- requires: New amount must be greater than zero and less than 1% of total supply
 
 - events-emits: [MaxBridgeUpdated](/contracts/ecosystem/GovernanceToken.sol/contract.GovernanceToken.md#maxbridgeupdated) event
 
 - throws: ZeroAmount if newMaxBridge is zero
 
+- throws: ValidationFailed if bridge amount is too high
+
 
 ```solidity
-function updateMaxBridgeAmount(uint256 newMaxBridge) external onlyRole(DEFAULT_ADMIN_ROLE);
+function updateMaxBridgeAmount(uint256 newMaxBridge) external nonZeroAmount(newMaxBridge) onlyRole(MANAGER_ROLE);
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
 |`newMaxBridge`|`uint256`|New maximum bridge amount|
+
+
+### scheduleUpgrade
+
+Only callable by an address with UPGRADER_ROLE
+
+*Schedules an upgrade to a new implementation*
+
+**Notes:**
+- requires-role: UPGRADER_ROLE
+
+- events-emits: [UpgradeScheduled](/contracts/ecosystem/GovernanceToken.sol/contract.GovernanceToken.md#upgradescheduled) event
+
+- throws: ZeroAddress if newImplementation is zero
+
+
+```solidity
+function scheduleUpgrade(address newImplementation)
+    external
+    nonZeroAddress(newImplementation)
+    onlyRole(UPGRADER_ROLE);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`newImplementation`|`address`|Address of the new implementation|
+
+
+### cancelUpgrade
+
+Cancels a previously scheduled upgrade
+
+*Only callable by addresses with UPGRADER_ROLE*
+
+
+```solidity
+function cancelUpgrade() external onlyRole(UPGRADER_ROLE);
+```
+
+### upgradeTimelockRemaining
+
+*Returns the remaining time before a scheduled upgrade can be executed*
+
+
+```solidity
+function upgradeTimelockRemaining() external view returns (uint256);
+```
+**Returns**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`<none>`|`uint256`|The time remaining in seconds, or 0 if no upgrade is scheduled or timelock has passed|
 
 
 ### nonces
@@ -370,10 +445,27 @@ function _update(address from, address to, uint256 value)
 
 ### _authorizeUpgrade
 
+*Internal authorization for contract upgrades with timelock enforcement*
+
+**Notes:**
+- requires-role: UPGRADER_ROLE (enforced by the function modifier)
+
+- requires: Upgrade must be scheduled and timelock must be expired
+
+- throws: UpgradeNotScheduled if no upgrade was scheduled
+
+- throws: UpgradeTimelockActive if timelock period hasn't passed
+
 
 ```solidity
 function _authorizeUpgrade(address newImplementation) internal override onlyRole(UPGRADER_ROLE);
 ```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`newImplementation`|`address`|Address of the new implementation contract|
+
 
 ## Events
 ### Initialized
@@ -435,6 +527,55 @@ event MaxBridgeUpdated(address indexed admin, uint256 oldMaxBridge, uint256 newM
 |`admin`|`address`|The address that updated the value|
 |`oldMaxBridge`|`uint256`|Previous maximum bridge amount|
 |`newMaxBridge`|`uint256`|New maximum bridge amount|
+
+### BridgeRoleAssigned
+*Emitted when a bridge role is assigned*
+
+
+```solidity
+event BridgeRoleAssigned(address indexed admin, address indexed bridgeAddress);
+```
+
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`admin`|`address`|The admin who set the role|
+|`bridgeAddress`|`address`|The bridge address receiving the role|
+
+### UpgradeScheduled
+*Emitted when an upgrade is scheduled*
+
+
+```solidity
+event UpgradeScheduled(
+    address indexed sender, address indexed implementation, uint64 scheduledTime, uint64 effectiveTime
+);
+```
+
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`sender`|`address`|The address that scheduled the upgrade|
+|`implementation`|`address`|The new implementation address|
+|`scheduledTime`|`uint64`|The time when the upgrade was scheduled|
+|`effectiveTime`|`uint64`|The time when the upgrade can be executed|
+
+### UpgradeCancelled
+Emitted when a scheduled upgrade is cancelled
+
+
+```solidity
+event UpgradeCancelled(address indexed canceller, address indexed implementation);
+```
+
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`canceller`|`address`|The address that cancelled the upgrade|
+|`implementation`|`address`|The implementation address that was cancelled|
 
 ### Upgrade
 *Upgrade Event.*
@@ -500,11 +641,48 @@ error TGEAlreadyInitialized();
 error InvalidAddress(address provided, string reason);
 ```
 
+### UpgradeTimelockActive
+*Error thrown when trying to execute an upgrade too soon*
+
+
+```solidity
+error UpgradeTimelockActive(uint256 remainingTime);
+```
+
+### UpgradeNotScheduled
+*Error thrown when trying to execute an upgrade that wasn't scheduled*
+
+
+```solidity
+error UpgradeNotScheduled();
+```
+
+### ImplementationMismatch
+*Error thrown when trying to execute an upgrade with wrong implementation*
+
+
+```solidity
+error ImplementationMismatch(address expected, address provided);
+```
+
 ### ValidationFailed
 *Error thrown for general validation failures*
 
 
 ```solidity
 error ValidationFailed(string reason);
+```
+
+## Structs
+### UpgradeRequest
+*Upgrade timelock storage*
+
+
+```solidity
+struct UpgradeRequest {
+    address implementation;
+    uint64 scheduledTime;
+    bool exists;
+}
 ```
 

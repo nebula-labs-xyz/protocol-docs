@@ -1,120 +1,5 @@
 # InvestmentManager
-[Git Source](https://github.com/nebula-labs-xyz/lendefi-dao/blob/07f5cb7369219dbffd648091ffbddb6d70a0157c/contracts/ecosystem/InvestmentManager.sol)
-
-## Overview
-
-The InvestmentManager contract is a sophisticated investment round management system for the Lendefi DAO. It facilitates token distribution through structured investment rounds with custom vesting parameters. The contract exhibits a well-designed state machine for round lifecycle management and implements comprehensive security measures.
-
-## Architecture Design
-
-### Core Components
-
-1. **Round State Machine**
-   - Well-defined round lifecycle progression (PENDING → ACTIVE → COMPLETED → FINALIZED)
-   - Alternative CANCELLED state with refund capabilities
-   - Clear status transition rules with validation
-
-2. **Access Control System**
-   - Four distinct roles with tailored permissions:
-     - `MANAGER_ROLE`: Administrative operations
-     - `PAUSER_ROLE`: Emergency controls
-     - `UPGRADER_ROLE`: Smart contract upgrades
-     - `DAO_ROLE`: Governance operations (assigned to timelock)
-
-3. **Investor Management**
-   - Allocation tracking with two-step participation model
-   - Individual investment position tracking
-   - Vesting contract deployment for finalized investments
-   - Refund capabilities for cancelled rounds
-
-4. **Vesting Integration**
-   - Custom `InvestorVesting` contract deployment per investor
-   - Round-specific vesting parameters (cliff and duration)
-   - Direct token transfers to vesting contracts
-
-## Technical Implementation
-
-### Security Features
-
-1. **Transaction Protection**
-   - Reentrancy guards on all fund-moving functions
-   - State updates before external calls (ETH transfers)
-   - Robust modifier usage to validate conditions
-
-2. **Fund Management**
-   - Safe ETH transfers using `Address.sendValue`
-   - SafeERC20 for token transfers
-   - Clear accounting of ETH and token movements
-
-3. **Input Validation**
-   - Comprehensive parameter validation
-   - Round boundary checking (min/max duration)
-   - Allocation limits enforcement
-   - Zero-address checks
-
-4. **Emergency Controls**
-   - Pausability for global emergency stop
-   - Round cancellation with refund mechanism
-   - Individual investment cancellation options
-
-### Gas Optimization
-
-1. **Storage Access**
-   - Strategic use of storage vs memory variables
-   - Caching of repeatedly accessed values
-   - Efficient array operations
-
-2. **Loop Optimization**
-   - Unchecked increment for loop counters
-   - Length caching before loops
-   - Early exit patterns
-
-3. **Array Management**
-   - Efficient investor removal algorithm to minimize gas
-   - Bounded arrays (MAX_INVESTORS_PER_ROUND = 50)
-
-## Strengths
-
-1. **Well-Structured Design**
-   - Clean separation of concerns
-   - Logical function organization
-   - Clear state transitions
-
-2. **Comprehensive Documentation**
-   - Excellent NatSpec comments
-   - Detailed function descriptions
-   - Security considerations noted
-   - Error explanations
-
-3. **Robust Safety Measures**
-   - Multiple validation layers
-   - Clear error messages
-   - Fail-fast design philosophy
-
-4. **Upgradeability**
-   - UUPS pattern implementation
-   - Version tracking
-   - Storage gap for future extensions
-
-## Potential Concerns
-
-1. **Centralization Risks**
-   - Guardian role has significant power (multiple critical roles)
-   - No time-locks on sensitive operations
-   - Single-signature administration
-
-2. **Gas Limitations**
-   - Finalizing rounds with many investors might approach block gas limits
-   - Linear search for investor removal is O(n)
-
-3. **Edge Cases**
-   - Round timing edge cases may exist around block timestamps
-   - No mechanism to extend rounds if target not met
-
-4. **Economic Design**
-   - Fixed investor limit per round (50) may be restrictive for larger rounds
-   - No dynamic pricing or auction mechanisms
-
+[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/d0b15d8d57415f38e3db367bb9e72ba910580c33/contracts/ecosystem/InvestmentManager.sol)
 
 **Inherits:**
 [IINVMANAGER](/contracts/interfaces/IInvestmentManager.sol/interface.IINVMANAGER.md), Initializable, PausableUpgradeable, AccessControlUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable
@@ -133,6 +18,10 @@ Manages investment rounds and token vesting for the ecosystem
 
 ## State Variables
 ### MAX_INVESTORS_PER_ROUND
+Protects against gas limits when processing all investors during finalization
+
+*Maximum number of investors allowed per investment round*
+
 
 ```solidity
 uint256 private constant MAX_INVESTORS_PER_ROUND = 50;
@@ -140,6 +29,10 @@ uint256 private constant MAX_INVESTORS_PER_ROUND = 50;
 
 
 ### MIN_ROUND_DURATION
+Ensures rounds are long enough for investor participation (5 days)
+
+*Minimum duration for an investment round in seconds*
+
 
 ```solidity
 uint256 private constant MIN_ROUND_DURATION = 5 days;
@@ -147,13 +40,32 @@ uint256 private constant MIN_ROUND_DURATION = 5 days;
 
 
 ### MAX_ROUND_DURATION
+Prevents overly long rounds that might block capital (90 days)
+
+*Maximum duration for an investment round in seconds*
+
 
 ```solidity
 uint256 private constant MAX_ROUND_DURATION = 90 days;
 ```
 
 
+### UPGRADE_TIMELOCK_DURATION
+Provides a security delay before implementation changes can be executed (3 days)
+
+*Duration of the timelock period for contract upgrades in seconds*
+
+
+```solidity
+uint256 private constant UPGRADE_TIMELOCK_DURATION = 3 days;
+```
+
+
 ### PAUSER_ROLE
+Typically granted to guardian addresses for emergency security actions
+
+*Role identifier for addresses authorized to pause contract functions*
+
 
 ```solidity
 bytes32 private constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
@@ -161,6 +73,10 @@ bytes32 private constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
 
 ### MANAGER_ROLE
+Can perform administrative functions like emergency withdrawals
+
+*Role identifier for addresses authorized to manage investment operations*
+
 
 ```solidity
 bytes32 private constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
@@ -168,6 +84,10 @@ bytes32 private constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
 
 
 ### UPGRADER_ROLE
+Controls the ability to schedule and execute contract upgrades
+
+*Role identifier for addresses authorized to upgrade the contract*
+
 
 ```solidity
 bytes32 private constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
@@ -175,6 +95,10 @@ bytes32 private constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
 
 
 ### DAO_ROLE
+Has control over creating investment rounds and major decisions
+
+*Role identifier for addresses representing the DAO's governance*
+
 
 ```solidity
 bytes32 private constant DAO_ROLE = keccak256("DAO_ROLE");
@@ -182,13 +106,21 @@ bytes32 private constant DAO_ROLE = keccak256("DAO_ROLE");
 
 
 ### ecosystemToken
+Used for token transfers and vesting distributions
+
+*Reference to the ecosystem's ERC20 token*
+
 
 ```solidity
-ILENDEFI public ecosystemToken;
+IERC20 internal ecosystemToken;
 ```
 
 
 ### timelock
+Destination for emergency withdrawals and holds elevated permissions
+
+*Address of the timelock controller*
+
 
 ```solidity
 address public timelock;
@@ -196,6 +128,10 @@ address public timelock;
 
 
 ### treasury
+Receives ETH from finalized investment rounds
+
+*Address of the treasury contract*
+
 
 ```solidity
 address public treasury;
@@ -203,6 +139,10 @@ address public treasury;
 
 
 ### supply
+Tracks the supply commitment for all created rounds
+
+*Total amount of tokens allocated for investment rounds*
+
 
 ```solidity
 uint256 public supply;
@@ -210,6 +150,10 @@ uint256 public supply;
 
 
 ### version
+Incremented on each upgrade to track contract versions
+
+*Implementation version of this contract*
+
 
 ```solidity
 uint32 public version;
@@ -217,6 +161,10 @@ uint32 public version;
 
 
 ### rounds
+Core data structure that stores round configurations and status
+
+*Array of all investment rounds*
+
 
 ```solidity
 Round[] public rounds;
@@ -224,6 +172,10 @@ Round[] public rounds;
 
 
 ### investors
+Used to track all participants in each round
+
+*Maps round IDs to arrays of investor addresses*
+
 
 ```solidity
 mapping(uint32 => address[]) private investors;
@@ -231,6 +183,10 @@ mapping(uint32 => address[]) private investors;
 
 
 ### investorPositions
+Tracks how much each investor has contributed to a round
+
+*Maps round IDs and investors to their invested ETH amount*
+
 
 ```solidity
 mapping(uint32 => mapping(address => uint256)) private investorPositions;
@@ -238,6 +194,10 @@ mapping(uint32 => mapping(address => uint256)) private investorPositions;
 
 
 ### vestingContracts
+Used to track deployed vesting contracts for each investor
+
+*Maps round IDs and investors to their vesting contract addresses*
+
 
 ```solidity
 mapping(uint32 => mapping(address => address)) private vestingContracts;
@@ -245,6 +205,10 @@ mapping(uint32 => mapping(address => address)) private vestingContracts;
 
 
 ### investorAllocations
+Stores maximum ETH and token amounts for each investor in a round
+
+*Maps round IDs and investors to their token allocations*
+
 
 ```solidity
 mapping(uint32 => mapping(address => Allocation)) private investorAllocations;
@@ -252,45 +216,120 @@ mapping(uint32 => mapping(address => Allocation)) private investorAllocations;
 
 
 ### totalRoundAllocations
+Used to ensure round allocations don't exceed limits
+
+*Maps round IDs to the total token allocation for that round*
+
 
 ```solidity
 mapping(uint32 => uint256) private totalRoundAllocations;
 ```
 
 
-### __gap
+### pendingUpgrade
+Implements the timelock upgrade security pattern
+
+*Holds information about a pending contract upgrade*
+
 
 ```solidity
-uint256[45] private __gap;
+UpgradeRequest public pendingUpgrade;
+```
+
+
+### __gap
+Prevents storage collision when adding new variables in upgrades
+
+*Reserved storage slots for future upgrades*
+
+
+```solidity
+uint256[18] private __gap;
 ```
 
 
 ## Functions
 ### validRound
 
+*Ensures the provided round ID exists*
+
+**Note:**
+throws: InvalidRound if roundId is out of bounds
+
 
 ```solidity
 modifier validRound(uint32 roundId);
 ```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`roundId`|`uint32`|The ID of the investment round to check|
+
 
 ### activeRound
+
+*Ensures the round is in active status*
+
+**Note:**
+throws: RoundNotActive if the round is not active
 
 
 ```solidity
 modifier activeRound(uint32 roundId);
 ```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`roundId`|`uint32`|The ID of the investment round to check|
+
 
 ### correctStatus
+
+*Ensures the round has a specific status*
+
+**Note:**
+throws: InvalidRoundStatus if the round doesn't have the required status
 
 
 ```solidity
 modifier correctStatus(uint32 roundId, RoundStatus requiredStatus);
 ```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`roundId`|`uint32`|The ID of the investment round to check|
+|`requiredStatus`|`RoundStatus`|The status that the round should have|
+
+
+### nonZeroAddress
+
+*Ensures the provided address is not zero*
+
+**Note:**
+throws: ZeroAddressDetected if the address is zero
+
+
+```solidity
+modifier nonZeroAddress(address addr);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`addr`|`address`|The address to check|
+
 
 ### constructor
 
-**Note:**
-oz-upgrades-unsafe-allow: constructor
+*Ensures the provided amount is not zero*
+
+**Notes:**
+- throws: InvalidAmount if the amount is zero
+
+- oz-upgrades-unsafe-allow: constructor
 
 
 ```solidity
@@ -299,32 +338,12 @@ constructor();
 
 ### receive
 
-Fallback function to handle direct ETH transfers
+Automatically invests in the current active round
 
-*Automatically invests in the current active round*
+*Fallback function that handles direct ETH transfers*
 
-*Process:
-1. Gets current active round number
-2. Validates active round exists
-3. Forwards ETH to investEther function*
-
-*Requirements:
-- At least one round must be active
-- Sent ETH must match remaining allocation
-- Sender must have valid allocation*
-
-**Notes:**
-- throws: NO_ACTIVE_ROUND if no round is currently active
-
-- throws: AMOUNT_ALLOCATION_MISMATCH if sent amount doesn't match allocation
-
-- throws: NO_ALLOCATION if sender has no allocation
-
-- emits: Invest when investment is processed
-
-- security: Forwards to investEther which has reentrancy protection
-
-- security: Validates round status before processing
+**Note:**
+throws: NoActiveRound if no rounds are currently active
 
 
 ```solidity
@@ -333,69 +352,40 @@ receive() external payable;
 
 ### initialize
 
-Initializes the Investment Manager contract with core dependencies
+Sets up roles, connects to ecosystem contracts, and initializes version
 
-*Sets up initial roles and contract references*
+*Initializes the contract with essential parameters*
 
-*Initialization sequence:
-1. Initializes security modules:
-- Pausable functionality
-- Access control system
-- UUPS upgrade mechanism
-- Reentrancy protection
-2. Validates addresses
-3. Sets up roles and permissions
-4. Initializes contract references
-5. Sets initial version*
-
-**Notes:**
-- throws: ZERO_ADDRESS_DETECTED if any parameter is zero address
-
-- security: Can only be called once due to initializer modifier
-
-- security: Sets up critical security features first
-
-- security: Validates all addresses before use
-
-- emits: Initialized when setup is complete
+**Note:**
+throws: ZeroAddressDetected if any parameter is the zero address
 
 
 ```solidity
-function initialize(address token, address timelock_, address treasury_, address guardian) external initializer;
+function initialize(address token, address timelock_, address treasury_) external initializer;
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`token`|`address`|Address of the ecosystem token contract|
-|`timelock_`|`address`|Address of the timelock contract for governance|
+|`token`|`address`|Address of the ecosystem token|
+|`timelock_`|`address`|Address of the timelock controller|
 |`treasury_`|`address`|Address of the treasury contract|
-|`guardian`|`address`|Address of the initial guardian who receives admin roles|
 
 
 ### pause
 
-Pauses all contract operations
+Pauses the contract's core functionality
 
-*Only callable by accounts with PAUSER_ROLE*
+When paused, most state-changing functions will revert
 
-*When paused:
-- No new rounds can be created
-- No investments can be made
-- No rounds can be activated
-- No rounds can be finalized
-- Cancellations and refunds remain active for security*
+Emergency functions like withdrawals remain active while paused
+
+*Only callable by addresses with PAUSER_ROLE*
 
 **Notes:**
-- throws: Unauthorized if caller lacks PAUSER_ROLE
+- requires-role: PAUSER_ROLE
 
-- emits: Paused event with caller's address
-
-- security: Inherits OpenZeppelin's Pausable implementation
-
-- security: Role-based access control via PAUSER_ROLE
-
-- security: Emergency stop mechanism for contract operations
+- events-emits: {Paused} event from PausableUpgradeable
 
 
 ```solidity
@@ -404,55 +394,126 @@ function pause() external onlyRole(PAUSER_ROLE);
 
 ### unpause
 
-Unpauses all contract operations
+Unpauses the contract, resuming normal operations
 
-*Only callable by accounts with PAUSER_ROLE*
+Re-enables all functionality that was blocked during pause
 
-*After unpausing:
-- Round creation becomes available
-- Investments can be processed
-- Round activation allowed
-- Round finalization enabled
-- Normal contract operations resume*
+*Only callable by addresses with PAUSER_ROLE*
 
 **Notes:**
-- throws: Unauthorized if caller lacks PAUSER_ROLE
+- requires-role: PAUSER_ROLE
 
-- emits: Unpaused event with caller's address
-
-- security: Inherits OpenZeppelin's Pausable implementation
-
-- security: Role-based access control via PAUSER_ROLE
-
-- security: Restores normal contract functionality
+- events-emits: {Unpaused} event from PausableUpgradeable
 
 
 ```solidity
 function unpause() external onlyRole(PAUSER_ROLE);
 ```
 
-### createRound
+### scheduleUpgrade
 
-Creates a new investment round with custom vesting parameters
+Schedules an upgrade to a new implementation contract
 
-*Only callable by accounts with DAO_ROLE when contract is not paused*
+The upgrade cannot be executed until the timelock period has passed
+
+*Initiates the timelock period before an upgrade can be executed*
 
 **Notes:**
-- throws: INVALID_DURATION if round duration is outside allowed range
+- requires-role: UPGRADER_ROLE
 
-- throws: INVALID_ETH_TARGET if ethTarget is 0
+- security: Implements a timelock delay for added security
 
-- throws: INVALID_TOKEN_ALLOCATION if tokenAlloc is 0
+- events-emits: {UpgradeScheduled} when upgrade is scheduled
 
-- throws: INVALID_START_TIME if start is in the past
+- throws: ZeroAddressDetected if newImplementation is zero address
 
-- throws: INVALID_VESTING_PARAMETERS if vesting parameters are outside allowed range
+- throws: If called by address without UPGRADER_ROLE
 
-- throws: INSUFFICIENT_SUPPLY if contract doesn't have enough tokens
 
-- emits: CreateRound when round is created
+```solidity
+function scheduleUpgrade(address newImplementation)
+    external
+    onlyRole(UPGRADER_ROLE)
+    nonZeroAddress(newImplementation);
+```
+**Parameters**
 
-- emits: RoundStatusUpdated when round status is set to PENDING
+|Name|Type|Description|
+|----|----|-----------|
+|`newImplementation`|`address`|Address of the new implementation contract|
+
+
+### cancelUpgrade
+
+Cancels a previously scheduled upgrade
+
+*Only callable by addresses with UPGRADER_ROLE*
+
+
+```solidity
+function cancelUpgrade() external onlyRole(UPGRADER_ROLE);
+```
+
+### emergencyWithdrawToken
+
+Only callable by addresses with MANAGER_ROLE
+
+*Emergency function to withdraw all tokens to the timelock*
+
+**Notes:**
+- throws: ZeroAddressDetected if token address is zero
+
+- throws: ZeroBalance if contract has no token balance
+
+
+```solidity
+function emergencyWithdrawToken(address token) external nonReentrant onlyRole(MANAGER_ROLE) nonZeroAddress(token);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`token`|`address`|The ERC20 token to withdraw|
+
+
+### emergencyWithdrawEther
+
+Only callable by addresses with MANAGER_ROLE
+
+*Emergency function to withdraw all ETH to the timelock*
+
+**Note:**
+throws: ZeroBalance if contract has no ETH balance
+
+
+```solidity
+function emergencyWithdrawEther() external nonReentrant onlyRole(MANAGER_ROLE);
+```
+
+### createRound
+
+Creates a new investment round with specified parameters
+
+*Only callable by DAO_ROLE when contract is not paused*
+
+**Notes:**
+- requires-role: DAO_ROLE
+
+- security: Validates all parameters and checks token supply
+
+- events-emits: {CreateRound} when round is created
+
+- events-emits: {RoundStatusUpdated} when round status is set to PENDING
+
+- throws: InvalidDuration if duration is outside allowed range
+
+- throws: InvalidEthTarget if ethTarget is zero
+
+- throws: InvalidTokenAllocation if tokenAlloc is zero
+
+- throws: InvalidStartTime if start is in the past
+
+- throws: InsufficientSupply if contract lacks required tokens
 
 
 ```solidity
@@ -469,42 +530,44 @@ function createRound(
 
 |Name|Type|Description|
 |----|----|-----------|
-|`start`|`uint64`|The timestamp when the round starts|
-|`duration`|`uint64`|The duration of the round in seconds|
-|`ethTarget`|`uint256`|The target amount of ETH to raise|
-|`tokenAlloc`|`uint256`|The amount of tokens allocated for the round|
-|`vestingCliff`|`uint64`|The cliff period in seconds before vesting begins|
-|`vestingDuration`|`uint64`|The total duration of the vesting period in seconds|
+|`start`|`uint64`|Timestamp when the round should start|
+|`duration`|`uint64`|Length of the round in seconds|
+|`ethTarget`|`uint256`|Target amount of ETH to raise in the round|
+|`tokenAlloc`|`uint256`|Total number of tokens allocated for this round|
+|`vestingCliff`|`uint64`|Duration in seconds before vesting begins|
+|`vestingDuration`|`uint64`|Total duration of the vesting period in seconds|
 
 **Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint32`|roundId The identifier of the newly created round|
+|`<none>`|`uint32`|roundId The ID of the newly created round|
 
 
 ### activateRound
 
 Activates a pending investment round
 
-*Only callable by accounts with MANAGER_ROLE*
-
-*Requires:
-- Round exists (validRound modifier)
-- Round is in PENDING status (correctStatus modifier)
-- Contract is not paused (whenNotPaused modifier)
-- Current time is within round's time window*
+*Only callable by MANAGER_ROLE when contract is not paused*
 
 **Notes:**
-- throws: ROUND_START_TIME_NOT_REACHED if current time is before round start
+- requires-role: MANAGER_ROLE
 
-- throws: ROUND_END_TIME_REACHED if current time is after round end
+- security: Ensures round exists and is in PENDING status
 
-- throws: INVALID_ROUND if roundId is invalid
+- security: Validates round timing constraints
 
-- throws: INVALID_ROUND_STATUS if round is not in PENDING status
+- events-emits: {RoundStatusUpdated} when round status is set to ACTIVE
 
-- emits: RoundStatusUpdated when round status changes to ACTIVE
+- modifiers: validRound, correctStatus(PENDING), whenNotPaused
+
+- throws: RoundStartTimeNotReached if current time is before start time
+
+- throws: RoundEndTimeReached if current time is after end time
+
+- throws: InvalidRound if roundId doesn't exist
+
+- throws: InvalidRoundStatus if round is not in PENDING status
 
 
 ```solidity
@@ -519,34 +582,35 @@ function activateRound(uint32 roundId)
 
 |Name|Type|Description|
 |----|----|-----------|
-|`roundId`|`uint32`|The identifier of the round to activate|
+|`roundId`|`uint32`|The ID of the round to activate|
 
 
 ### addInvestorAllocation
 
-Adds or updates token allocation for an investor in a specific round
+Adds a new investor allocation to a specific investment round
 
-*Only callable by accounts with MANAGER_ROLE when contract is not paused*
-
-*Requires:
-- Round exists (validRound modifier)
-- Round is not completed
-- Valid investor address
-- Non-zero amounts
-- Total allocation within round limits*
+*Only callable by MANAGER_ROLE when contract is not paused*
 
 **Notes:**
-- throws: INVALID_INVESTOR if investor address is zero
+- requires-role: MANAGER_ROLE
 
-- throws: INVALID_ETH_AMOUNT if ethAmount is zero
+- security: Validates round status and allocation limits
 
-- throws: INVALID_TOKEN_AMOUNT if tokenAmount is zero
+- events-emits: {InvestorAllocated} when allocation is added
 
-- throws: INVALID_ROUND_STATUS if round is completed or cancelled
+- modifiers: validRound, whenNotPaused
 
-- throws: EXCEEDS_ROUND_ALLOCATION if new total exceeds round allocation
+- throws: InvalidInvestor if investor address is zero
 
-- emits: InvestorAllocated when allocation is successfully added/updated
+- throws: InvalidEthAmount if ethAmount is zero
+
+- throws: InvalidTokenAmount if tokenAmount is zero
+
+- throws: InvalidRoundStatus if round is completed or finalized
+
+- throws: AllocationExists if investor already has an allocation
+
+- throws: ExceedsRoundAllocation if allocation exceeds round limit
 
 
 ```solidity
@@ -560,45 +624,34 @@ function addInvestorAllocation(uint32 roundId, address investor, uint256 ethAmou
 
 |Name|Type|Description|
 |----|----|-----------|
-|`roundId`|`uint32`|The identifier of the investment round|
-|`investor`|`address`|The address of the investor receiving the allocation|
-|`ethAmount`|`uint256`|The amount of ETH being allocated|
-|`tokenAmount`|`uint256`|The amount of tokens being allocated|
+|`roundId`|`uint32`|The ID of the investment round|
+|`investor`|`address`|The address of the investor to allocate|
+|`ethAmount`|`uint256`|Amount of ETH the investor is allowed to invest|
+|`tokenAmount`|`uint256`|Amount of tokens the investor will receive|
 
 
 ### removeInvestorAllocation
 
 Removes an investor's allocation from a specific investment round
 
-*Only callable by accounts with MANAGER_ROLE when contract is not paused*
-
-*Requirements:
-- Round exists (validRound modifier)
-- Round is not completed
-- Valid investor address
-- Allocation exists for investor
-- Investor has not made any investments yet*
-
-*State Changes:
-- Zeros out investor's allocation
-- Decrements total round allocation*
+*Only callable by MANAGER_ROLE when contract is not paused*
 
 **Notes:**
-- throws: INVALID_INVESTOR if investor address is zero
+- requires-role: MANAGER_ROLE
 
-- throws: INVALID_ROUND_STATUS if round is completed or cancelled
+- security: Ensures investor has no active position before removal
 
-- throws: NO_ALLOCATION_EXISTS if investor has no allocation
+- events-emits: {InvestorAllocationRemoved} when allocation is removed
 
-- throws: INVESTOR_HAS_ACTIVE_POSITION if investor has already invested
+- modifiers: validRound, whenNotPaused
 
-- emits: InvestorAllocationRemoved when allocation is successfully removed
+- throws: InvalidInvestor if investor address is zero
 
-- security: Uses validRound modifier to prevent invalid round access
+- throws: InvalidRoundStatus if round is not in PENDING or ACTIVE status
 
-- security: Updates state before event emission
+- throws: NoAllocationExists if investor has no allocation
 
-- security: Maintains accurate total allocation tracking
+- throws: InvestorHasActivePosition if investor has already invested
 
 
 ```solidity
@@ -612,38 +665,30 @@ function removeInvestorAllocation(uint32 roundId, address investor)
 
 |Name|Type|Description|
 |----|----|-----------|
-|`roundId`|`uint32`|The identifier of the investment round|
+|`roundId`|`uint32`|The ID of the investment round|
 |`investor`|`address`|The address of the investor whose allocation to remove|
 
 
 ### cancelInvestment
 
-Allows investors to cancel their investment and receive a refund
+Allows an investor to cancel their investment in an active round
 
-*Processes investment cancellation and ETH refund*
-
-*Requirements:
-- Round exists (validRound modifier)
-- Round is active (activeRound modifier)
-- Protected against reentrancy (nonReentrant modifier)
-- Caller must have an active investment*
-
-*State Changes:
-- Sets investor's position to 0
-- Decrements round's total ETH invested
-- Decrements round's participant count
-- Removes investor from round's investor list*
+*Returns the invested ETH to the investor and updates round state*
 
 **Notes:**
-- throws: NO_INVESTMENT if caller has no active investment
+- security: Uses nonReentrant guard for ETH transfers
 
-- emits: CancelInvestment when investment is successfully cancelled
+- security: Only allows cancellation during active round status
 
-- security: Uses nonReentrant modifier to prevent reentrancy attacks
+- events-emits: {CancelInvestment} when investment is cancelled
 
-- security: Uses Address.sendValue for safe ETH transfer
+- modifiers: validRound, activeRound, nonReentrant
 
-- security: Updates state before external calls
+- throws: NoInvestment if caller has no active investment
+
+- throws: InvalidRound if roundId doesn't exist
+
+- throws: RoundNotActive if round is not in active status
 
 
 ```solidity
@@ -653,81 +698,72 @@ function cancelInvestment(uint32 roundId) external validRound(roundId) activeRou
 
 |Name|Type|Description|
 |----|----|-----------|
-|`roundId`|`uint32`|The identifier of the round to cancel investment from|
+|`roundId`|`uint32`|The ID of the investment round|
 
 
 ### finalizeRound
 
-Finalizes an investment round and deploys vesting contracts for investors
+Finalizes a completed investment round
 
-*Processes token distribution and transfers ETH to treasury*
-
-*Requirements:
-- Round exists (validRound modifier)
-- Protected against reentrancy (nonReentrant modifier)
-- Contract not paused (whenNotPaused modifier)
-- Round must be in COMPLETED status*
-
-*Process:
-1. Validates round status
-2. Iterates through all round investors
-3. For each valid investment:
-- Calculates token allocation
-- Deploys vesting contract
-- Transfers tokens to vesting contract
-- Updates round token distribution
-4. Updates round status to FINALIZED
-5. Transfers accumulated ETH to treasury*
+*Deploys vesting contracts and distributes tokens to investors*
 
 **Notes:**
-- throws: INVALID_ROUND_STATUS if round is not in COMPLETED status
+- security: Uses nonReentrant guard for token transfers
 
-- throws: Address: insufficient balance if ETH transfer to treasury fails
+- security: Only callable when contract is not paused
 
-- emits: RoundFinalized with final round statistics
+- security: Processes all investors in the round
 
-- security: Uses nonReentrant modifier to prevent reentrancy
+- events-emits: {RoundFinalized} when round is finalized
 
-- security: Uses SafeERC20 for token transfers
+- events-emits: {DeployVesting} for each vesting contract created
 
-- security: Uses unchecked block for gas optimization in loop counter
+- events-emits: {RoundStatusUpdated} when status changes to FINALIZED
+
+- modifiers: validRound, correctStatus(COMPLETED), nonReentrant, whenNotPaused
+
+- throws: InvalidRound if roundId doesn't exist
+
+- throws: InvalidRoundStatus if round is not in COMPLETED status
 
 
 ```solidity
-function finalizeRound(uint32 roundId) external validRound(roundId) nonReentrant whenNotPaused;
+function finalizeRound(uint32 roundId)
+    external
+    validRound(roundId)
+    correctStatus(roundId, RoundStatus.COMPLETED)
+    nonReentrant
+    whenNotPaused;
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`roundId`|`uint32`|The identifier of the round to finalize|
+|`roundId`|`uint32`|The ID of the investment round to finalize|
 
 
 ### cancelRound
 
 Cancels an investment round and returns tokens to treasury
 
-*Only callable by accounts with MANAGER_ROLE when contract is not paused*
-
-*Requirements:
-- Round exists (validRound modifier)
-- Round is in PENDING or ACTIVE status
-- Caller has MANAGER_ROLE
-- Contract is not paused*
-
-*State Changes:
-- Updates round status to CANCELLED
-- Decrements total token supply
-- Transfers round's token allocation back to treasury*
+*Only callable by MANAGER_ROLE when contract is not paused*
 
 **Notes:**
-- throws: INVALID_STATUS_TRANSITION if round is not in PENDING or ACTIVE status
+- requires-role: MANAGER_ROLE
 
-- throws: INVALID_ROUND if roundId is invalid
+- security: Ensures round can only be cancelled in PENDING or ACTIVE status
 
-- emits: RoundCancelled when round is successfully cancelled
+- security: Automatically returns allocated tokens to treasury
 
-- security: Uses SafeERC20 for token transfers
+- events-emits: {RoundStatusUpdated} when status changes to CANCELLED
+
+- events-emits: {RoundCancelled} when round is cancelled
+
+- modifiers: validRound, whenNotPaused
+
+- throws: InvalidRound if roundId doesn't exist
+
+- throws: InvalidRoundStatus if round is not in PENDING or ACTIVE status
 
 
 ```solidity
@@ -737,41 +773,31 @@ function cancelRound(uint32 roundId) external validRound(roundId) onlyRole(MANAG
 
 |Name|Type|Description|
 |----|----|-----------|
-|`roundId`|`uint32`|The identifier of the round to cancel|
+|`roundId`|`uint32`|The ID of the investment round to cancel|
 
 
 ### claimRefund
 
-Allows investors to claim their refund after round cancellation
+Allows investors to claim ETH refunds from cancelled rounds
 
-*Processes refund claims and updates round state*
-
-*Requirements:
-- Round exists (validRound modifier)
-- Protected against reentrancy (nonReentrant modifier)
-- Round must be in CANCELLED status
-- Caller must have refund available*
-
-*State Changes:
-- Sets investor's position to 0
-- Decrements round's total ETH invested
-- Decrements round's participant count if > 0
-- Removes investor from round's investor list*
+*Refunds the full invested amount and updates round state*
 
 **Notes:**
-- throws: ROUND_NOT_CANCELLED if round is not in CANCELLED status
+- security: Uses nonReentrant guard for ETH transfers
 
-- throws: NO_REFUND_AVAILABLE if caller has no refund to claim
+- security: Ensures round is in CANCELLED status
 
-- throws: INVALID_ROUND if roundId is invalid
+- security: Updates investor position and round state atomically
 
-- emits: RefundClaimed when refund is successfully processed
+- events-emits: {RefundClaimed} when refund is processed
 
-- security: Uses nonReentrant modifier to prevent reentrancy attacks
+- modifiers: validRound, nonReentrant
 
-- security: Uses Address.sendValue for safe ETH transfer
+- throws: InvalidRound if roundId doesn't exist
 
-- security: Updates state before external calls
+- throws: RoundNotCancelled if round is not in CANCELLED status
+
+- throws: NoRefundAvailable if caller has no refund to claim
 
 
 ```solidity
@@ -781,21 +807,37 @@ function claimRefund(uint32 roundId) external validRound(roundId) nonReentrant;
 
 |Name|Type|Description|
 |----|----|-----------|
-|`roundId`|`uint32`|The identifier of the round to claim refund from|
+|`roundId`|`uint32`|The ID of the investment round|
+
+
+### upgradeTimelockRemaining
+
+Calculates remaining time in the upgrade timelock period
+
+*Returns 0 if no upgrade is pending or timelock has expired*
+
+**Note:**
+security: Helps track upgrade timelock status
+
+
+```solidity
+function upgradeTimelockRemaining() external view returns (uint256);
+```
+**Returns**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`<none>`|`uint256`|uint256 Remaining time in seconds before upgrade can be executed|
 
 
 ### getRefundAmount
 
-Gets the refund amount available for an investor in a cancelled round
+Gets the refundable amount for an investor in a cancelled round
 
-*Returns 0 if round is not cancelled, otherwise returns investor's position*
+*Returns 0 if round is not cancelled or investor has no position*
 
-**Notes:**
-- security: No state modifications
-
-- security: Safe to call by anyone
-
-- security: Returns 0 for non-cancelled rounds or non-existent positions
+**Note:**
+security: Only returns values for cancelled rounds
 
 
 ```solidity
@@ -805,19 +847,21 @@ function getRefundAmount(uint32 roundId, address investor) external view returns
 
 |Name|Type|Description|
 |----|----|-----------|
-|`roundId`|`uint32`|The identifier of the investment round|
+|`roundId`|`uint32`|The ID of the investment round|
 |`investor`|`address`|The address of the investor to check|
 
 **Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint256`|amount The amount of ETH available for refund|
+|`<none>`|`uint256`|uint256 Amount of ETH available for refund|
 
 
 ### getInvestorDetails
 
-Gets the investment details for an investor in a specific round
+Retrieves investment details for a specific investor in a round
+
+*Returns allocation amounts, invested amount, and vesting contract address*
 
 
 ```solidity
@@ -830,43 +874,41 @@ function getInvestorDetails(uint32 roundId, address investor)
 
 |Name|Type|Description|
 |----|----|-----------|
-|`roundId`|`uint32`|The round identifier|
-|`investor`|`address`|The investor address|
+|`roundId`|`uint32`|The ID of the investment round to query|
+|`investor`|`address`|The address of the investor to query|
 
 **Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`etherAmount`|`uint256`|The amount of ETH allocated|
-|`tokenAmount`|`uint256`|The amount of tokens allocated|
-|`invested`|`uint256`|The amount already invested|
-|`vestingContract`|`address`|The address of the vesting contract (if deployed)|
+|`etherAmount`|`uint256`|The maximum amount of ETH the investor can invest|
+|`tokenAmount`|`uint256`|The amount of tokens allocated to the investor|
+|`invested`|`uint256`|The amount of ETH already invested by the investor|
+|`vestingContract`|`address`|The address of the investor's vesting contract|
+
+
+### getEcosystemToken
+
+Gets the address of the ecosystem token
+
+*Provides access to the token contract address*
+
+
+```solidity
+function getEcosystemToken() external view returns (address);
+```
+**Returns**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`<none>`|`address`|address The address of the ecosystem token contract|
 
 
 ### getRoundInfo
 
-Retrieves detailed information about a specific investment round
+Retrieves all information about a specific investment round
 
-*Returns complete Round struct with all round parameters and current state*
-
-*Round struct contains:
-- etherTarget: Target ETH amount for the round
-- etherInvested: Current ETH amount invested
-- tokenAllocation: Total tokens allocated for round
-- tokenDistributed: Amount of tokens distributed
-- startTime: Round start timestamp
-- endTime: Round end timestamp
-- vestingCliff: Vesting cliff period
-- vestingDuration: Total vesting duration
-- participants: Current number of investors
-- status: Current round status*
-
-**Notes:**
-- security: View function - no state modifications
-
-- security: Safe to call by anyone
-
-- security: Returns full struct copy - higher gas cost for large data
+*Returns the full Round struct with all round parameters*
 
 
 ```solidity
@@ -876,35 +918,20 @@ function getRoundInfo(uint32 roundId) external view returns (Round memory);
 
 |Name|Type|Description|
 |----|----|-----------|
-|`roundId`|`uint32`|The identifier of the round to query|
+|`roundId`|`uint32`|The ID of the investment round to query|
 
 **Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`Round`|Round struct containing all round details|
+|`<none>`|`Round`|Round Complete round information including status and allocations|
 
 
 ### getRoundInvestors
 
-Gets the complete list of investors for a specific investment round
+Gets the list of investors in a specific round
 
-*Returns array of all investor addresses that participated in the round*
-
-*Important considerations:
-- Returns full array copy - gas cost scales with number of investors
-- Array includes all historical investors, even those who cancelled
-- Maximum size limited by MAX_INVESTORS_PER_ROUND (50)
-- Order of addresses matches investment chronology*
-
-**Notes:**
-- security: View function - no state modifications
-
-- security: Safe to call by anyone
-
-- security: Returns empty array for invalid roundId
-
-- security: Memory array bounded by MAX_INVESTORS_PER_ROUND
+*Returns array of all investor addresses that participated*
 
 
 ```solidity
@@ -914,43 +941,41 @@ function getRoundInvestors(uint32 roundId) external view returns (address[] memo
 
 |Name|Type|Description|
 |----|----|-----------|
-|`roundId`|`uint32`|The identifier of the investment round to query|
+|`roundId`|`uint32`|The ID of the investment round to query|
 
 **Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`address[]`|Array of investor addresses for the specified round|
+|`<none>`|`address[]`|address[] Array of investor addresses in the round|
 
 
 ### investEther
 
-Allows investors to participate in the current round using ETH
+Processes ETH investment in a specific investment round
 
-*Processes ETH investments for allocated participants*
-
-*Requirements:
-- Round exists (validRound modifier)
-- Round is active (activeRound modifier)
-- Contract not paused (whenNotPaused modifier)
-- Protected against reentrancy (nonReentrant modifier)
-- Round not ended
-- Round not oversubscribed
-- Investor has allocation
-- Exact remaining allocation amount sent*
+*Handles direct investment and fallback function investments*
 
 **Notes:**
-- throws: ROUND_ENDED if round end time has passed
+- security: Uses nonReentrant guard for ETH transfers
 
-- throws: ROUND_OVERSUBSCRIBED if participant limit reached
+- security: Validates round status and investor allocation
 
-- throws: NO_ALLOCATION if sender has no allocation
+- security: Enforces investment limits and round constraints
 
-- throws: AMOUNT_ALLOCATION_MISMATCH if sent amount doesn't match remaining allocation
+- events-emits: {Invest} when investment is processed
 
-- emits: Invest when investment is processed successfully
+- events-emits: {RoundComplete} if round target is reached
 
-- emits: RoundComplete when round reaches target after investment
+- modifiers: validRound, activeRound, whenNotPaused, nonReentrant
+
+- throws: RoundEnded if round end time has passed
+
+- throws: RoundOversubscribed if maximum investor count reached
+
+- throws: NoAllocation if sender has no allocation
+
+- throws: AmountAllocationMismatch if sent ETH doesn't match remaining allocation
 
 
 ```solidity
@@ -966,27 +991,19 @@ function investEther(uint32 roundId)
 
 |Name|Type|Description|
 |----|----|-----------|
-|`roundId`|`uint32`|The identifier of the round to invest in|
+|`roundId`|`uint32`|The ID of the investment round|
 
 
 ### getCurrentRound
 
-Gets the first active round number
+Gets the ID of the currently active investment round
 
-*Iterates through rounds array to find first ACTIVE round*
-
-*Returns type(uint32).max if no active round exists*
-
-*Gas usage increases linearly with number of rounds*
-
-*No state modifications - pure view function*
+*Iterates through all rounds to find one with ACTIVE status*
 
 **Notes:**
-- security: Safe to call by anyone
+- security: Returns max uint32 value as sentinel when no active round is found
 
-- security: No state modifications
-
-- security: Returns max uint32 instead of reverting when no active round
+- view-stability: Does not modify state
 
 
 ```solidity
@@ -996,64 +1013,31 @@ function getCurrentRound() public view returns (uint32);
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint32`|roundId The first active round number, or type(uint32).max if none found|
-
-
-### _updateRoundStatus
-
-Updates the status of an investment round
-
-*Internal function to manage round status transitions*
-
-*Requirements:
-- New status must be higher than current status
-- Status transitions are one-way only
-- Valid status progression:
-PENDING -> ACTIVE -> COMPLETED -> FINALIZED
-PENDING/ACTIVE -> CANCELLED*
-
-**Notes:**
-- throws: INVALID_STATUS_TRANSITION if attempting invalid status change
-
-- emits: RoundStatusUpdated when status is successfully changed
-
-- security: Enforces unidirectional status transitions
-
-- security: Uses uint8 casting for safe status comparisons
-
-
-```solidity
-function _updateRoundStatus(uint32 roundId, RoundStatus newStatus) internal;
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`roundId`|`uint32`|The identifier of the round to update|
-|`newStatus`|`RoundStatus`|The new status to set for the round|
+|`<none>`|`uint32`|uint32 The ID of the active round, or type(uint32).max if no active round exists|
 
 
 ### _authorizeUpgrade
 
-Authorizes and processes contract upgrades
+Authorizes and executes a contract upgrade after timelock period
 
-*Internal override for UUPS upgrade authorization*
-
-*Performs:
-1. Validates caller has UPGRADER_ROLE
-2. Increments contract version
-3. Emits upgrade event with details*
+*Internal function called by the UUPS upgrade mechanism*
 
 **Notes:**
-- throws: Unauthorized if caller lacks UPGRADER_ROLE
+- requires-role: UPGRADER_ROLE
 
-- emits: Upgrade event with upgrader address and new implementation
+- security: Enforces timelock period before upgrade execution
 
-- security: Role-based access control via UPGRADER_ROLE
+- security: Verifies upgrade was properly scheduled
 
-- security: Version tracking for upgrade management
+- security: Checks implementation address matches scheduled upgrade
 
-- security: Inherits OpenZeppelin's UUPSUpgradeable pattern
+- events-emits: {Upgraded} when upgrade is executed
+
+- throws: UpgradeNotScheduled if no upgrade was scheduled
+
+- throws: ImplementationMismatch if implementation doesn't match scheduled
+
+- throws: UpgradeTimelockActive if timelock period hasn't elapsed
 
 
 ```solidity
@@ -1066,29 +1050,43 @@ function _authorizeUpgrade(address newImplementation) internal override onlyRole
 |`newImplementation`|`address`|Address of the new implementation contract|
 
 
-### _processInvestment
+### _updateRoundStatus
 
-Processes an investment from either ETH or WETH
+Updates the status of an investment round
 
-*Internal function to handle investment processing and state updates*
-
-*State Changes:
-- Adds investor to round's investor list if first investment
-- Increments round's participant count for new investors
-- Updates investor's position with investment amount
-- Updates round's total ETH invested
-- Updates round status if target reached*
+*Internal function to manage round state transitions*
 
 **Notes:**
-- emits: Invest when investment is processed
+- security: Ensures status transitions are only forward-moving
 
-- emits: RoundComplete if investment reaches round target
+- events-emits: {RoundStatusUpdated} when status is changed
 
-- security: Updates all state before emitting events
+- throws: InvalidStatusTransition if attempting to move to a previous status
 
-- security: Handles first-time investor tracking
 
-- security: Safe arithmetic operations via Solidity 0.8+
+```solidity
+function _updateRoundStatus(uint32 roundId, RoundStatus newStatus) internal;
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`roundId`|`uint32`|The ID of the investment round to update|
+|`newStatus`|`RoundStatus`|The new status to set for the round|
+
+
+### _processInvestment
+
+Processes an investment into a round
+
+*Handles investment accounting and status updates*
+
+**Notes:**
+- security: Updates investor tracking and round state atomically
+
+- events-emits: {Invest} when investment is processed
+
+- events-emits: {RoundComplete} if round target is reached
 
 
 ```solidity
@@ -1098,36 +1096,19 @@ function _processInvestment(uint32 roundId, address investor, uint256 amount) pr
 
 |Name|Type|Description|
 |----|----|-----------|
-|`roundId`|`uint32`|The identifier of the investment round|
-|`investor`|`address`|The address of the investor making the investment|
-|`amount`|`uint256`|The amount of ETH/WETH being invested|
+|`roundId`|`uint32`|The ID of the investment round|
+|`investor`|`address`|The address of the investor|
+|`amount`|`uint256`|The amount of ETH being invested|
 
 
 ### _removeInvestor
 
-Removes an investor from a round's investor list
+Removes an investor from a round's tracking array
 
-*Internal function using gas-optimized array manipulation*
+*Uses optimized removal pattern to maintain array integrity*
 
-*Algorithm:
-1. Locates investor in round's investor array
-2. If found and not last element:
-- Moves last element to found position
-- Pops last element
-3. If found and last element:
-- Simply pops last element*
-
-*Gas Optimizations:
-- Uses unchecked increment for loop counter
-- Minimizes storage reads with length caching
-- Uses efficient array pop over delete*
-
-**Notes:**
-- security: No return value - silently completes if investor not found
-
-- security: Storage array modification only - no external calls
-
-- security: Safe array operations via Solidity 0.8+ bounds checking
+**Note:**
+security: Maintains array consistency with gas-efficient removal
 
 
 ```solidity
@@ -1137,97 +1118,20 @@ function _removeInvestor(uint32 roundId, address investor) private;
 
 |Name|Type|Description|
 |----|----|-----------|
-|`roundId`|`uint32`|The identifier of the investment round|
+|`roundId`|`uint32`|The ID of the investment round|
 |`investor`|`address`|The address of the investor to remove|
-
-
-### _setupRoles
-
-Sets up initial roles and permissions for contract operation
-
-*Internal function called during initialization*
-
-*Role assignments:
-- Guardian receives:
-- DEFAULT_ADMIN_ROLE
-- MANAGER_ROLE
-- PAUSER_ROLE
-- UPGRADER_ROLE
-- Timelock receives:
-- DAO_ROLE*
-
-**Notes:**
-- security: Uses OpenZeppelin AccessControl
-
-- security: Critical for establishing permission hierarchy
-
-- security: Only called once during initialization
-
-
-```solidity
-function _setupRoles(address guardian, address timelock_) private;
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`guardian`|`address`|Address receiving admin and operational roles|
-|`timelock_`|`address`|Address receiving governance role|
-
-
-### _initializeContracts
-
-Initializes core contract references and dependencies
-
-*Internal function called during contract initialization*
-
-*Sets up:
-- Ecosystem token interface
-- Timelock contract reference
-- Treasury contract reference*
-
-**Notes:**
-- security: Called only once during initialization
-
-- security: Addresses already validated before call
-
-- security: Critical for contract functionality
-
-
-```solidity
-function _initializeContracts(address token, address timelock_, address treasury_) private;
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`token`|`address`|Address of the ecosystem token contract|
-|`timelock_`|`address`|Address of the timelock contract for governance|
-|`treasury_`|`address`|Address of the treasury contract|
 
 
 ### _deployVestingContract
 
-Deploys vesting contract for an investor with round-specific parameters
+Deploys a new vesting contract for an investor
 
-*Internal function to create and configure vesting contracts*
-
-*Process:
-1. Retrieves round parameters from storage
-2. Creates new InvestorVesting contract instance
-3. Configures with:
-- Ecosystem token address
-- Investor address as beneficiary
-- Cliff start time (current time + round cliff)
-- Round-specific vesting duration
-4. Emits deployment event*
+*Creates and configures a vesting schedule for allocated tokens*
 
 **Notes:**
-- security: Uses safe type casting for timestamps
+- security: Sets up vesting parameters based on round configuration
 
-- security: Emits event before returning for complete audit trail
-
-- emits: DeployVesting with contract details and allocation
+- events-emits: {DeployVesting} when vesting contract is created
 
 
 ```solidity
@@ -1237,9 +1141,9 @@ function _deployVestingContract(address investor, uint256 allocation, uint32 rou
 
 |Name|Type|Description|
 |----|----|-----------|
-|`investor`|`address`|The address of the beneficiary for the vesting contract|
+|`investor`|`address`|The address of the investor who will receive the tokens|
 |`allocation`|`uint256`|The amount of tokens to be vested|
-|`roundId`|`uint32`|The identifier of the investment round|
+|`roundId`|`uint32`|The ID of the investment round|
 
 **Returns**
 
