@@ -1,0 +1,2 @@
+# Contents
+- [Functions](Functions.md)
