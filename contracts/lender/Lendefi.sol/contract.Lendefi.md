@@ -1,26 +1,11 @@
 # Lendefi
-[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/d0b15d8d57415f38e3db367bb9e72ba910580c33/contracts/lender/Lendefi.sol)
+[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/a5a218c0db8bfb52cb836dc7d721fd999f5de3c1/contracts/lender/Lendefi.sol)
 
 **Inherits:**
 [IPROTOCOL](/contracts/interfaces/IProtocol.sol/interface.IPROTOCOL.md), PausableUpgradeable, AccessControlUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable
 
 **Author:**
 alexei@nebula-labs(dot)xyz
-
-,,       ,,  ,,    ,,,    ,,   ,,,      ,,,    ,,,   ,,,          ,,,
-███▄     ██  ███▀▀▀███▄   ██▄██▀▀██▄    ██▌     ██▌  ██▌        ▄▄███▄▄
-█████,   ██  ██▌          ██▌     └██▌  ██▌     ██▌  ██▌        ╟█   ╙██
-██ └███ ██  ██▌└██╟██   l███▀▄███╟█    ██      ╟██  ╟█i        ▐█▌█▀▄██╟
-██   ╙████  ██▌          ██▌     ,██▀   ╙██    ▄█▀  ██▌        ▐█▌    ██
-██     ╙██  █████▀▀▄██▀  ██▌██▌╙███▀`     ▀██▄██▌   █████▀▄██▀ ▐█▌    ██╟
-¬─      ¬─   ¬─¬─  ¬─¬─'  ¬─¬─¬─¬ ¬─'       ¬─¬─    '¬─   '─¬   ¬─     ¬─'
-,,,          ,,     ,,,    ,,,      ,,   ,,,  ,,,      ,,,    ,,,   ,,,    ,,,   ,,,
-██▌          ███▀▀▀███▄   ███▄     ██   ██▄██▀▀██▄     ███▀▀▀███▄   ██▄██▀▀██▄  ▄██╟
-██▌          ██▌          █████,   ██   ██▌     └██▌   ██▌          ██▌          ██
-╟█l          ███▀▄███     ██ └███  ██   l██       ██╟  ███▀▄███     ██▌└██╟██    ╟█i
-██▌         ██▌          ██    ╙████    ██▌     ,██▀  ██▌          ██▌           ██
-█████▀▄██▀  █████▀▀▄██▀  ██      ╙██    ██▌██▌╙███▀`  █████▀▀▄██▀  ╙██           ╙██
-¬─     ¬─   ¬─¬─  ¬─¬─'  ¬─¬─     ¬─'   ¬─¬─   '¬─    '─¬   ¬─      ¬─'           ¬─'
 
 An efficient monolithic lending protocol
 
@@ -70,6 +55,55 @@ Security Features:
 
 
 ## State Variables
+### WAD
+*Utility for set operations on address collections*
+
+*Standard decimals for percentage calculations (1e6 = 100%)*
+
+
+```solidity
+uint256 internal constant WAD = 1e6;
+```
+
+
+### PAUSER_ROLE
+*Role identifier for users authorized to pause/unpause the protocol*
+
+
+```solidity
+bytes32 internal constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+```
+
+
+### MANAGER_ROLE
+*Role identifier for users authorized to manage protocol parameters*
+
+
+```solidity
+bytes32 internal constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
+```
+
+
+### UPGRADER_ROLE
+*Role identifier for users authorized to upgrade the contract*
+
+
+```solidity
+bytes32 internal constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
+```
+
+
+### UPGRADE_TIMELOCK_DURATION
+Duration of the timelock for upgrade operations (3 days)
+
+*Provides time for users to review and react to scheduled upgrades*
+
+
+```solidity
+uint256 public constant UPGRADE_TIMELOCK_DURATION = 3 days;
+```
+
+
 ### usdcInstance
 *Reference to the USDC stablecoin contract used for lending/borrowing*
 
@@ -365,13 +399,13 @@ Pauses the protocol in an emergency situation
 *When paused, all state-changing functions will revert*
 
 **Notes:**
-- access-control: Restricted to LendefiConstants.PAUSER_ROLE
+- access-control: Restricted to PAUSER_ROLE
 
 - events: Emits a Paused event from PausableUpgradeable
 
 
 ```solidity
-function pause() external override onlyRole(LendefiConstants.PAUSER_ROLE);
+function pause() external override onlyRole(PAUSER_ROLE);
 ```
 
 ### unpause
@@ -381,13 +415,13 @@ Unpauses the protocol after an emergency is resolved
 *Restores full functionality to all state-changing functions*
 
 **Notes:**
-- access-control: Restricted to LendefiConstants.PAUSER_ROLE
+- access-control: Restricted to PAUSER_ROLE
 
 - events: Emits an Unpaused event from PausableUpgradeable
 
 
 ```solidity
-function unpause() external override onlyRole(LendefiConstants.PAUSER_ROLE);
+function unpause() external override onlyRole(PAUSER_ROLE);
 ```
 
 ### flashLoan
@@ -567,12 +601,6 @@ Claims accumulated rewards for eligible liquidity providers
 ```solidity
 function claimReward() external nonReentrant whenNotPaused returns (uint256 finalReward);
 ```
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`finalReward`|`uint256`|amount|
-
 
 ### createPosition
 
@@ -1023,7 +1051,7 @@ Updates protocol parameters from a configuration struct
 *Validates all parameters against minimum/maximum constraints before applying*
 
 **Notes:**
-- access-control: Restricted to LendefiConstants.MANAGER_ROLE
+- access-control: Restricted to MANAGER_ROLE
 
 - events: Emits a ProtocolConfigUpdated event
 
@@ -1038,7 +1066,7 @@ Updates protocol parameters from a configuration struct
 
 
 ```solidity
-function loadProtocolConfig(ProtocolConfig calldata config) external onlyRole(LendefiConstants.MANAGER_ROLE);
+function loadProtocolConfig(ProtocolConfig calldata config) external onlyRole(MANAGER_ROLE);
 ```
 **Parameters**
 
@@ -1054,24 +1082,24 @@ Resets protocol parameters to default values
 *Reverts all configuration parameters to conservative default values*
 
 **Notes:**
-- access-control: Restricted to LendefiConstants.MANAGER_ROLE
+- access-control: Restricted to MANAGER_ROLE
 
 - events: Emits a ProtocolConfigReset event
 
 
 ```solidity
-function resetProtocolConfig() external onlyRole(LendefiConstants.MANAGER_ROLE);
+function resetProtocolConfig() external onlyRole(MANAGER_ROLE);
 ```
 
 ### scheduleUpgrade
 
 Schedules an upgrade to a new implementation with timelock
 
-*Only callable by addresses with LendefiConstants.UPGRADER_ROLE*
+*Only callable by addresses with UPGRADER_ROLE*
 
 
 ```solidity
-function scheduleUpgrade(address newImplementation) external onlyRole(LendefiConstants.UPGRADER_ROLE);
+function scheduleUpgrade(address newImplementation) external onlyRole(UPGRADER_ROLE);
 ```
 **Parameters**
 
@@ -1084,11 +1112,11 @@ function scheduleUpgrade(address newImplementation) external onlyRole(LendefiCon
 
 Cancels a previously scheduled upgrade
 
-*Only callable by addresses with LendefiConstants.UPGRADER_ROLE*
+*Only callable by addresses with UPGRADER_ROLE*
 
 
 ```solidity
-function cancelUpgrade() external onlyRole(LendefiConstants.UPGRADER_ROLE);
+function cancelUpgrade() external onlyRole(UPGRADER_ROLE);
 ```
 
 ### upgradeTimelockRemaining
@@ -1106,26 +1134,6 @@ function upgradeTimelockRemaining() external view returns (uint256);
 |Name|Type|Description|
 |----|----|-----------|
 |`<none>`|`uint256`|timeRemaining The time remaining in seconds|
-
-
-### getConfig
-
-Retrieves the current protocol configuration parameters
-
-*Returns the full ProtocolConfig struct containing all settings*
-
-**Note:**
-access-control: Available to any caller, read-only function
-
-
-```solidity
-function getConfig() external view returns (ProtocolConfig memory);
-```
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`<none>`|`ProtocolConfig`|ProtocolConfig struct containing: - profitTargetRate: Target profit rate for the protocol (1e6 = 100%) - borrowRate: Base borrow rate before tier adjustments (1e6 = 100%) - rewardAmount: Amount of governance tokens for liquidity rewards - rewardInterval: Time required between reward claims (in seconds) - rewardableSupply: Minimum supply required for reward eligibility - liquidatorThreshold: Minimum governance tokens required to liquidate - flashLoanFee: Fee charged for flash loans (in basis points)|
 
 
 ### getUserPosition
@@ -1344,7 +1352,7 @@ function getPositionLiquidationFee(address user, uint256 positionId)
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint256`|The liquidation fee percentage in LendefiConstants.WAD format (e.g., 0.05e6 = 5%)|
+|`<none>`|`uint256`|The liquidation fee percentage in WAD format (e.g., 0.05e6 = 5%)|
 
 
 ### calculateCreditLimit
@@ -1455,14 +1463,14 @@ function healthFactor(address user, uint256 positionId) public view validPositio
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint256`|The position's health factor in LendefiConstants.WAD format (1.0 = 1e6)|
+|`<none>`|`uint256`|The position's health factor in WAD format (1.0 = 1e6)|
 
 
 ### getUtilization
 
 Calculates the current protocol utilization rate
 
-*Utilization = totalBorrow / totalSuppliedLiquidity, in LendefiConstants.WAD format*
+*Utilization = totalBorrow / totalSuppliedLiquidity, in WAD format*
 
 
 ```solidity
@@ -1489,7 +1497,7 @@ function getSupplyRate() public view returns (uint256);
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint256`|The current annual supply interest rate in LendefiConstants.WAD format|
+|`<none>`|`uint256`|The current annual supply interest rate in WAD format|
 
 
 ### getBorrowRate
@@ -1512,7 +1520,7 @@ function getBorrowRate(IASSETS.CollateralTier tier) public view returns (uint256
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint256`|The current annual borrow interest rate in LendefiConstants.WAD format|
+|`<none>`|`uint256`|The current annual borrow interest rate in WAD format|
 
 
 ### isRewardable
@@ -1565,6 +1573,13 @@ function getPositionTier(address user, uint256 positionId)
 |----|----|-----------|
 |`tier`|`IASSETS.CollateralTier`|The position's collateral tier (STABLE, CROSS_A, CROSS_B, or ISOLATED)|
 
+
+### getConfig
+
+
+```solidity
+function getConfig() external view returns (ProtocolConfig memory);
+```
 
 ### _processDeposit
 
@@ -1708,7 +1723,7 @@ function _processRepay(uint256 positionId, uint256 proposedAmount, UserPosition 
 |----|----|-----------|
 |`positionId`|`uint256`|The ID of the position being repaid|
 |`proposedAmount`|`uint256`|The amount the user is offering to repay (uncapped)|
-|`position`|`UserPosition`|The UserPosition struct for the position being repaid|
+|`position`|`UserPosition`||
 
 **Returns**
 
@@ -1759,7 +1774,7 @@ Authorizes an upgrade to a new implementation
 
 
 ```solidity
-function _authorizeUpgrade(address newImplementation) internal override onlyRole(LendefiConstants.UPGRADER_ROLE);
+function _authorizeUpgrade(address newImplementation) internal override onlyRole(UPGRADER_ROLE);
 ```
 **Parameters**
 

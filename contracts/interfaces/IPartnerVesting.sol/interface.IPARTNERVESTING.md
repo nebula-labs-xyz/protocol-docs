@@ -1,38 +1,24 @@
 # IPARTNERVESTING
-[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/d0b15d8d57415f38e3db367bb9e72ba910580c33/contracts/interfaces/IPartnerVesting.sol)
+[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/aaed57cb7ee1c677c0c943d32a39d9411c489fc9/contracts/interfaces/IPartnerVesting.sol)
 
-**Author:**
-alexei@nebula-labs(dot)xyz
-
-Interface for PartnerVesting.sol
-
-**Note:**
-security-contact: security@nebula-labs.xyz
+Interface for partner vesting contracts with cancellation capabilities
 
 
 ## Functions
 ### cancelContract
 
-Cancels the vesting contract and returns unvested funds to the creator
+Cancels the vesting contract and returns unvested funds to timelock
 
-*Only callable by the contract creator (typically the Ecosystem contract)*
+*Only callable by timelock*
 
 
 ```solidity
 function cancelContract() external returns (uint256);
 ```
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`<none>`|`uint256`|The amount of tokens returned to the creator|
-
 
 ### release
 
 Releases vested tokens to the beneficiary (partner)
-
-*Can be called by anyone, but tokens are always sent to the contract owner (beneficiary)*
 
 
 ```solidity
@@ -41,9 +27,7 @@ function release() external;
 
 ### releasable
 
-Calculates the amount of tokens that can be released at the current time
-
-*Subtracts already released tokens from the total vested amount*
+Returns the amount of tokens that can be released at the current time
 
 
 ```solidity
@@ -53,14 +37,12 @@ function releasable() external view returns (uint256);
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint256`|The amount of tokens currently available for release|
+|`<none>`|`uint256`|The amount of releasable tokens|
 
 
 ### start
 
-Returns the timestamp when vesting begins
-
-*This value is immutable and set during contract creation*
+Returns the start time of the vesting period
 
 
 ```solidity
@@ -70,14 +52,12 @@ function start() external view returns (uint256);
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint256`|The start timestamp of the vesting period|
+|`<none>`|`uint256`|The start timestamp|
 
 
 ### duration
 
-Returns the length of the vesting period
-
-*This value is immutable and set during contract creation*
+Returns the duration of the vesting period in seconds
 
 
 ```solidity
@@ -87,14 +67,12 @@ function duration() external view returns (uint256);
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint256`|The duration in seconds of the vesting period|
+|`<none>`|`uint256`|The duration in seconds|
 
 
 ### end
 
-Returns the timestamp when vesting ends
-
-*Calculated as start() + duration()*
+Returns the end time of the vesting period
 
 
 ```solidity
@@ -104,14 +82,12 @@ function end() external view returns (uint256);
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint256`|The end timestamp of the vesting period|
+|`<none>`|`uint256`|The end timestamp|
 
 
 ### released
 
-Returns the total amount of tokens that have been released so far
-
-*Used in vesting calculations to determine how many more tokens can be released*
+Returns the amount of tokens already released
 
 
 ```solidity
@@ -121,18 +97,18 @@ function released() external view returns (uint256);
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint256`|The cumulative amount of tokens released to the beneficiary|
+|`<none>`|`uint256`|The amount of tokens released|
 
 
 ## Events
 ### VestingInitialized
-Emitted when a new vesting contract is initialized
-
-*Triggered during contract creation with the vesting parameters*
+Emitted when the vesting contract is initialized
 
 
 ```solidity
-event VestingInitialized(address indexed token, address indexed beneficiary, uint64 startTimestamp, uint64 duration);
+event VestingInitialized(
+    address indexed token, address indexed beneficiary, address indexed timelock, uint64 startTimestamp, uint64 duration
+);
 ```
 
 **Parameters**
@@ -140,30 +116,27 @@ event VestingInitialized(address indexed token, address indexed beneficiary, uin
 |Name|Type|Description|
 |----|----|-----------|
 |`token`|`address`|Address of the ERC20 token being vested|
-|`beneficiary`|`address`|Address of the partner receiving the vested tokens|
-|`startTimestamp`|`uint64`|UNIX timestamp when vesting begins|
+|`beneficiary`|`address`|Address that will receive the vested tokens|
+|`timelock`|`address`|Address of the governance timelock|
+|`startTimestamp`|`uint64`|When the vesting schedule starts|
 |`duration`|`uint64`|Length of the vesting period in seconds|
 
 ### Cancelled
-Emitted when a vesting contract is cancelled
-
-*Triggered when the contract creator cancels the vesting and reclaims unvested tokens*
+Emitted when the vesting contract is cancelled
 
 
 ```solidity
-event Cancelled(uint256 amount);
+event Cancelled(uint256 remainingTokens);
 ```
 
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`amount`|`uint256`|The amount of unvested tokens returned to the creator|
+|`remainingTokens`|`uint256`|Amount of unvested tokens returned to the creator|
 
 ### ERC20Released
-Emitted when vested tokens are released to the beneficiary
-
-*Triggered each time tokens are claimed or automatically released during cancellation*
+Emitted when tokens are released to the beneficiary
 
 
 ```solidity
@@ -174,14 +147,14 @@ event ERC20Released(address indexed token, uint256 amount);
 
 |Name|Type|Description|
 |----|----|-----------|
-|`token`|`address`|Address of the token that was released|
-|`amount`|`uint256`|The amount of tokens released|
+|`token`|`address`|Address of the ERC20 token being released|
+|`amount`|`uint256`|Amount of tokens released|
 
 ## Errors
 ### Unauthorized
-Error thrown when an unauthorized address attempts a restricted action
+Unauthorized access attempt
 
-*Used to restrict functions that should only be callable by the contract creator*
+*Thrown when a function restricted to the creator is called by someone else*
 
 
 ```solidity
@@ -189,9 +162,9 @@ error Unauthorized();
 ```
 
 ### ZeroAddress
-Error thrown when a zero address is provided where a valid address is required
+Zero address provided for a critical parameter
 
-*Used in validation of constructor parameters*
+*Thrown when token, timelock, or beneficiary address is zero*
 
 
 ```solidity

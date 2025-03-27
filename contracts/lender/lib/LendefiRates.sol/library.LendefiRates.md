@@ -1,5 +1,5 @@
 # LendefiRates
-[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/d0b15d8d57415f38e3db367bb9e72ba910580c33/contracts/lender/lib/LendefiRates.sol)
+[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/7882024792b94909a5d6c51ec494855406aaf294/contracts/lender/lib/LendefiRates.sol)
 
 Library for core calculation functions used by Lendefi protocol
 

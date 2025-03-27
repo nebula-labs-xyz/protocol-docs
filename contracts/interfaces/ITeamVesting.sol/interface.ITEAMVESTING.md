@@ -1,5 +1,5 @@
 # ITEAMVESTING
-[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/d0b15d8d57415f38e3db367bb9e72ba910580c33/contracts/interfaces/ITeamVesting.sol)
+[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/aaed57cb7ee1c677c0c943d32a39d9411c489fc9/contracts/interfaces/ITeamVesting.sol)
 
 **Note:**
 security-contact: security@nebula-labs.xyz
@@ -93,20 +93,14 @@ function release() external;
 
 ### cancelContract
 
-Cancels the vesting contract and refunds remaining tokens
-
-*Release the tokens that have already vested.*
+*Release the tokens that have already vested.
+Emits a [ERC20Released](/contracts/interfaces/ITeamVesting.sol/interface.ITEAMVESTING.md#erc20released) event.
+Refund the remainder to the timelock*
 
 
 ```solidity
-function cancelContract() external returns (uint256 remainder);
+function cancelContract() external;
 ```
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`remainder`|`uint256`|Amount of tokens returned to the timelock Emits a [ERC20Released](/contracts/interfaces/ITeamVesting.sol/interface.ITEAMVESTING.md#erc20released) event. Refund the remainder to the timelock|
-
 
 ## Events
 ### Cancelled
@@ -138,44 +132,18 @@ event ERC20Released(address indexed token, uint256 amount);
 |`token`|`address`|address|
 |`amount`|`uint256`|released|
 
-### VestingInitialized
-*Contract initialization event*
+## Errors
+### CustomError
+*Custom Error.*
 
 
 ```solidity
-event VestingInitialized(
-    address indexed token, address indexed beneficiary, address indexed timelock, uint64 startTimestamp, uint64 duration
-);
+error CustomError(string msg);
 ```
 
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`token`|`address`|Address of the vested token contract|
-|`beneficiary`|`address`|Address that will receive the vested tokens|
-|`timelock`|`address`|Address of the timelock contract that can cancel vesting|
-|`startTimestamp`|`uint64`|Unix timestamp when vesting begins|
-|`duration`|`uint64`|Length of the vesting period in seconds|
-
-## Errors
-### Unauthorized
-Error thrown when an unauthorized address attempts a restricted action
-
-*Used to restrict functions that should only be callable by the contract creator*
-
-
-```solidity
-error Unauthorized();
-```
-
-### ZeroAddress
-Error thrown when a zero address is provided where a valid address is required
-
-*Used in validation of constructor parameters*
-
-
-```solidity
-error ZeroAddress();
-```
+|`msg`|`string`|error desription|
 

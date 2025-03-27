@@ -1,12 +1,85 @@
 # LendefiGovernor
-[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/d0b15d8d57415f38e3db367bb9e72ba910580c33/contracts/ecosystem/LendefiGovernor.sol)
+[Git Source](https://github.com/nebula-labs-xyz/lendefi-dao/blob/07f5cb7369219dbffd648091ffbddb6d70a0157c/contracts/ecosystem/LendefiGovernor.sol)
+
+## Overview
+
+The LendefiGovernor contract implements the governance infrastructure for the Lendefi DAO, combining OpenZeppelin's upgradeable governance modules with custom UUPS upgradeability. This contract serves as the democratic decision-making mechanism for the DAO, allowing token holders to propose, vote on, and execute changes to the protocol.
+
+## Architecture Analysis
+
+### Contract Structure
+- **Extensive inheritance**: Combines eight OpenZeppelin upgradeable contracts to form a comprehensive governance solution
+- **Modular design**: Each inherited contract provides a distinct governance feature
+- **UUPS upgradeability**: Implements the Universal Upgradeable Proxy Standard with version tracking
+- **Timelock integration**: Enforces delay between proposal approval and execution
+
+### Key Governance Parameters
+- **Voting delay**: 7200 blocks (~1 day at 12s block time)
+- **Voting period**: 50400 blocks (~1 week)
+- **Proposal threshold**: 20,000 tokens required to submit proposals
+- **Quorum requirement**: 1% of total token supply must vote for valid decisions
+- **Two-step ownership**: Enhanced security for administrative controls
+
+## Technical Assessment
+
+### Strengths
+
+1. **Comprehensive governance features**:
+   - On-chain proposal and voting system
+   - Configurable governance parameters
+   - Token-based voting with checkpoints
+   - Quorum validation for consensus
+   - Timelock execution for security
+
+2. **Security practices**:
+   - Zero-address validation in initialization
+   - Two-step ownership transfer process
+   - Version tracking for upgrade management
+   - Storage gap for upgrade safety
+   - Event emissions for important state changes
+
+3. **Clean implementation**:
+   - Proper use of OpenZeppelin's battle-tested contracts
+   - Clear function documentation
+   - Strategic override resolution
+   - Appropriate function visibility
+   - Consistent error handling
+
+### Potential Concerns
+
+1. **Administrative centralization**:
+   - Owner has unilateral upgrade control
+   - No time-lock on upgrade functionality
+   - No multi-signature requirement for admin functions
+
+2. **Limited customization**:
+   - Fixed voting mechanism (for, against, abstain)
+   - No weighted voting system
+   - Single quorum calculation method
+   - No delegation incentives
+
+3. **Governance parameters**:
+   - Fixed parameters after initialization
+   - No adjustment mechanism through governance
+   - Potential for governance attacks with low quorum (1%)
+
+## Code Quality Assessment
+
+- **Documentation**: Good NatSpec comments for functions
+- **Error handling**: Clear custom error messages
+- **Event emissions**: Comprehensive event logging
+- **Inheritance management**: Proper function overrides and call order
+- **Storage safety**: Appropriate storage gap for future extensions
+
+
+
 
 **Inherits:**
-GovernorUpgradeable, GovernorSettingsUpgradeable, GovernorCountingSimpleUpgradeable, GovernorVotesUpgradeable, GovernorVotesQuorumFractionUpgradeable, GovernorTimelockControlUpgradeable, AccessControlUpgradeable, UUPSUpgradeable
+GovernorUpgradeable, GovernorSettingsUpgradeable, GovernorCountingSimpleUpgradeable, GovernorVotesUpgradeable, GovernorVotesQuorumFractionUpgradeable, GovernorTimelockControlUpgradeable, Ownable2StepUpgradeable, UUPSUpgradeable
 
-Standard OZUpgradeable governor with UUPS and AccessControl
+Standard OZUpgradeable governor, small modification with UUPS
 
-*Implements a secure and upgradeable DAO governor with consistent role patterns*
+*Implements a secure and upgradeable DAO governor*
 
 **Notes:**
 - security-contact: security@nebula-labs.xyz
@@ -15,69 +88,8 @@ Standard OZUpgradeable governor with UUPS and AccessControl
 
 
 ## State Variables
-### UPGRADER_ROLE
-*Role identifier for addresses that can upgrade the contract*
-
-**Note:**
-security: Should be granted carefully as this is a critical permission
-
-
-```solidity
-bytes32 internal constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
-```
-
-
-### DEFAULT_VOTING_DELAY
-Default voting delay in blocks (approximately 1 day)
-
-*The period after a proposal is created during which voting cannot start*
-
-
-```solidity
-uint48 public constant DEFAULT_VOTING_DELAY = 7200;
-```
-
-
-### DEFAULT_VOTING_PERIOD
-Default voting period in blocks (approximately 1 week)
-
-*The period during which voting can occur*
-
-
-```solidity
-uint32 public constant DEFAULT_VOTING_PERIOD = 50400;
-```
-
-
-### DEFAULT_PROPOSAL_THRESHOLD
-Default proposal threshold (20,000 tokens)
-
-*The minimum number of votes needed to submit a proposal*
-
-
-```solidity
-uint256 public constant DEFAULT_PROPOSAL_THRESHOLD = 20_000 ether;
-```
-
-
-### UPGRADE_TIMELOCK_DURATION
-Duration of the timelock for upgrade operations (3 days)
-
-*Time that must elapse between scheduling and executing an upgrade*
-
-**Note:**
-security: Provides time for users to respond to potentially malicious upgrades
-
-
-```solidity
-uint256 public constant UPGRADE_TIMELOCK_DURATION = 3 days;
-```
-
-
 ### uupsVersion
-UUPS upgrade version tracker
-
-*Incremented with each upgrade to track contract versions*
+*UUPS version tracker*
 
 
 ```solidity
@@ -85,26 +97,10 @@ uint32 public uupsVersion;
 ```
 
 
-### pendingUpgrade
-Information about the currently pending upgrade
-
-*Will have exists=false if no upgrade is pending*
-
-
-```solidity
-UpgradeRequest public pendingUpgrade;
-```
-
-
 ### __gap
-*Reserved storage space for future upgrades*
-
-**Note:**
-oz-upgrades-unsafe-allow: state-variable-immutable
-
 
 ```solidity
-uint256[21] private __gap;
+uint256[50] private __gap;
 ```
 
 
@@ -125,7 +121,7 @@ constructor();
 
 
 ```solidity
-function initialize(IVotes _token, TimelockControllerUpgradeable _timelock, address _gnosisSafe) external initializer;
+function initialize(IVotes _token, TimelockControllerUpgradeable _timelock, address guardian) external initializer;
 ```
 **Parameters**
 
@@ -133,62 +129,8 @@ function initialize(IVotes _token, TimelockControllerUpgradeable _timelock, addr
 |----|----|-----------|
 |`_token`|`IVotes`|IVotes token instance|
 |`_timelock`|`TimelockControllerUpgradeable`|timelock instance|
-|`_gnosisSafe`|`address`|multisig address for emergency functions and upgrades|
+|`guardian`|`address`|owner address|
 
-
-### scheduleUpgrade
-
-Schedules an upgrade to a new implementation with timelock
-
-*Can only be called by addresses with UPGRADER_ROLE*
-
-
-```solidity
-function scheduleUpgrade(address newImplementation) external onlyRole(UPGRADER_ROLE);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`newImplementation`|`address`|Address of the new implementation contract|
-
-
-### cancelUpgrade
-
-Cancels a previously scheduled upgrade
-
-*Only callable by addresses with UPGRADER_ROLE*
-
-
-```solidity
-function cancelUpgrade() external onlyRole(UPGRADER_ROLE);
-```
-
-### upgradeTimelockRemaining
-
-Returns the remaining time before a scheduled upgrade can be executed
-
-
-```solidity
-function upgradeTimelockRemaining() external view returns (uint256);
-```
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`<none>`|`uint256`|timeRemaining The time remaining in seconds, or 0 if no upgrade is scheduled or timelock has passed|
-
-
-### supportsInterface
-
-
-```solidity
-function supportsInterface(bytes4 interfaceId)
-    public
-    view
-    override(GovernorUpgradeable, AccessControlUpgradeable)
-    returns (bool);
-```
 
 ### votingDelay
 
@@ -244,6 +186,13 @@ function proposalNeedsQueuing(uint256 proposalId)
 function proposalThreshold() public view override(GovernorUpgradeable, GovernorSettingsUpgradeable) returns (uint256);
 ```
 
+### _authorizeUpgrade
+
+
+```solidity
+function _authorizeUpgrade(address newImplementation) internal override onlyOwner;
+```
+
 ### _queueOperations
 
 
@@ -280,13 +229,6 @@ function _cancel(address[] memory targets, uint256[] memory values, bytes[] memo
     returns (uint256);
 ```
 
-### _authorizeUpgrade
-
-
-```solidity
-function _authorizeUpgrade(address newImplementation) internal override onlyRole(UPGRADER_ROLE);
-```
-
 ### _executor
 
 
@@ -300,7 +242,7 @@ function _executor()
 
 ## Events
 ### Initialized
-Emitted when the contract is initialized
+*Initialized Event.*
 
 
 ```solidity
@@ -311,10 +253,10 @@ event Initialized(address indexed src);
 
 |Name|Type|Description|
 |----|----|-----------|
-|`src`|`address`|The address that initialized the contract|
+|`src`|`address`|sender address|
 
 ### Upgrade
-Emitted when the contract is upgraded
+*event emitted on UUPS upgrade*
 
 
 ```solidity
@@ -325,107 +267,21 @@ event Upgrade(address indexed src, address indexed implementation);
 
 |Name|Type|Description|
 |----|----|-----------|
-|`src`|`address`|The address that executed the upgrade|
-|`implementation`|`address`|The address of the new implementation|
-
-### UpgradeScheduled
-Emitted when an upgrade is scheduled
-
-
-```solidity
-event UpgradeScheduled(
-    address indexed scheduler, address indexed implementation, uint64 scheduledTime, uint64 effectiveTime
-);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`scheduler`|`address`|The address scheduling the upgrade|
-|`implementation`|`address`|The new implementation contract address|
-|`scheduledTime`|`uint64`|The timestamp when the upgrade was scheduled|
-|`effectiveTime`|`uint64`|The timestamp when the upgrade can be executed|
-
-### UpgradeCancelled
-Emitted when a scheduled upgrade is cancelled
-
-
-```solidity
-event UpgradeCancelled(address indexed canceller, address indexed implementation);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`canceller`|`address`|The address that cancelled the upgrade|
-|`implementation`|`address`|The implementation address that was cancelled|
+|`src`|`address`|upgrade sender address|
+|`implementation`|`address`|new implementation address|
 
 ## Errors
-### ZeroAddress
-Error thrown when a zero address is provided
+### CustomError
+*Custom Error.*
 
 
 ```solidity
-error ZeroAddress();
-```
-
-### UpgradeTimelockActive
-Error thrown when attempting to execute an upgrade before timelock expires
-
-
-```solidity
-error UpgradeTimelockActive(uint256 timeRemaining);
+error CustomError(string msg);
 ```
 
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`timeRemaining`|`uint256`|The time remaining until the upgrade can be executed|
-
-### UpgradeNotScheduled
-Error thrown when attempting to execute an upgrade that wasn't scheduled
-
-
-```solidity
-error UpgradeNotScheduled();
-```
-
-### ImplementationMismatch
-Error thrown when implementation address doesn't match scheduled upgrade
-
-
-```solidity
-error ImplementationMismatch(address scheduledImpl, address attemptedImpl);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`scheduledImpl`|`address`|The address that was scheduled for upgrade|
-|`attemptedImpl`|`address`|The address that was attempted to be used|
-
-## Structs
-### UpgradeRequest
-Structure to store pending upgrade details
-
-
-```solidity
-struct UpgradeRequest {
-    address implementation;
-    uint64 scheduledTime;
-    bool exists;
-}
-```
-
-**Properties**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`implementation`|`address`|Address of the new implementation contract|
-|`scheduledTime`|`uint64`|Timestamp when the upgrade was scheduled|
-|`exists`|`bool`|Boolean flag indicating if an upgrade is currently scheduled|
+|`msg`|`string`|error desription|
 
