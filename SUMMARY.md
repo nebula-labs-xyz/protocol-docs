@@ -13,7 +13,7 @@
       - [TeamVesting](audit/ecosystem/TeamVesting.md)
       - [Treasury](audit/ecosystem/Treasury.md)
       - [Deploy](audit/ecosystem/DeployScript.md)
-    - [❱ protocol](audit/README.md)
+    - [❱ protocol](audit/protocol/README.md)
       - [protocol](audit/protocol/AuditExtended.md)
 # contracts
   - [❱ bridge](contracts/bridge/README.md)
