@@ -14,7 +14,7 @@
       - [Treasury](audit/ecosystem/Treasury.md)
       - [Deploy](audit/ecosystem/DeployScript.md)
     - [❱ protocol](audit/protocol/README.md)
-      - [protocol](audit/protocol/AuditExtended.md)
+      - [Lendefi](audit/protocol/AuditExtended.md)
 # contracts
   - [❱ bridge](contracts/bridge/README.md)
     - [Bridge](contracts/bridge/Bridge.sol/contract.Bridge.md)
