@@ -1,22 +1,19 @@
 # LendefiYieldToken
-[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/7882024792b94909a5d6c51ec494855406aaf294/contracts/lender/LendefiYieldToken.sol)
+[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/d0b15d8d57415f38e3db367bb9e72ba910580c33/contracts/lender/LendefiYieldToken.sol)
 
 **Inherits:**
 Initializable, ERC20PausableUpgradeable, AccessControlUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable
 
 **Author:**
-alexei@nebula-labs(dot)xyz
+alexei@nebula-labs.xyz
 
-LP token representing shares in the Lendefi lending protocol's liquidity pool, using 6 decimals to match USDC
+LP token representing shares in the Lendefi lending protocol's liquidity pool
 
-*This contract implements an ERC20 token that represents a user's share of the Lendefi protocol's
-lending pool. It's designed to be controlled exclusively by the main Lendefi protocol.
-The token uses 6 decimals to maintain consistency with USDC.*
+*This ERC20 token uses 6 decimals to match USDC and represents the lender's share in the
+Lendefi protocol's lending pool. Only the main protocol can mint and burn tokens.*
 
-**Notes:**
-- security-contact: security@nebula-labs.xyz
-
-- oz-upgrades: 
+**Note:**
+security-contact: security@nebula-labs.xyz
 
 
 ## State Variables
@@ -25,7 +22,7 @@ Role for pausing and unpausing token transfers in emergency situations
 
 
 ```solidity
-bytes32 internal constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 ```
 
 
@@ -34,7 +31,7 @@ Role for the main Lendefi protocol to control token minting and burning
 
 
 ```solidity
-bytes32 internal constant PROTOCOL_ROLE = keccak256("PROTOCOL_ROLE");
+bytes32 public constant PROTOCOL_ROLE = keccak256("PROTOCOL_ROLE");
 ```
 
 
@@ -43,14 +40,23 @@ Role for authorizing contract upgrades
 
 
 ```solidity
-bytes32 internal constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
+bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
+```
+
+
+### UPGRADE_TIMELOCK_DURATION
+Duration of the timelock for upgrade operations (3 days)
+
+*Provides time for users to review and react to scheduled upgrades*
+
+
+```solidity
+uint256 public constant UPGRADE_TIMELOCK_DURATION = 3 days;
 ```
 
 
 ### version
 Current version of the contract, incremented on each upgrade
-
-*Used to track implementation versions and verify successful upgrades*
 
 
 ```solidity
@@ -58,12 +64,21 @@ uint8 public version;
 ```
 
 
-### __gap
-*Reserved storage slots for future upgrades to maintain storage layout compatibility*
+### pendingUpgrade
+Information about the currently pending upgrade
 
 
 ```solidity
-uint256[50] private __gap;
+UpgradeRequest public pendingUpgrade;
+```
+
+
+### __gap
+*Reserved storage slots for future upgrades*
+
+
+```solidity
+uint256[25] private __gap;
 ```
 
 
@@ -84,41 +99,24 @@ Initializes the token with name, symbol, and key roles
 
 *Sets up token details and access control roles*
 
-**Notes:**
-- oz-upgrades-unsafe: initializer is used instead of constructor for proxy pattern
-
-- access: Only callable once during initialization
-
-- validation-rules: 
-- All addresses must be non-zero
-- Sets initial version to 1
-
 
 ```solidity
-function initialize(address protocol, address guardian) external initializer;
+function initialize(address protocol, address timelock, address multisig) external initializer;
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
 |`protocol`|`address`|Address of the Lendefi protocol contract (receives PROTOCOL_ROLE)|
-|`guardian`|`address`|Address with pausing capability (receives PAUSER_ROLE)|
+|`timelock`|`address`|Address of the timelock contract (receives DEFAULT_ADMIN_ROLE)|
+|`multisig`|`address`|Address with upgrade capability (receives UPGRADER_ROLE)|
 
 
 ### mint
 
 Mints new tokens to a recipient
 
-*Creates new token supply and assigns it to the recipient*
-
-**Notes:**
-- access: Restricted to PROTOCOL_ROLE (Lendefi protocol only)
-
-- security: Non-reentrant pattern prevents potential reentrancy attacks
-
-- state-changes: 
-- Increases recipient's token balance
-- Increases total token supply
+*Only callable by the protocol contract when not paused*
 
 
 ```solidity
@@ -136,16 +134,7 @@ function mint(address to, uint256 amount) external onlyRole(PROTOCOL_ROLE) whenN
 
 Burns tokens from a holder
 
-*Destroys token supply from the specified account*
-
-**Notes:**
-- access: Restricted to PROTOCOL_ROLE (Lendefi protocol only)
-
-- security: Non-reentrant pattern prevents potential reentrancy attacks
-
-- state-changes: 
-- Decreases account's token balance
-- Decreases total token supply
+*Only callable by the protocol contract when not paused*
 
 
 ```solidity
@@ -163,14 +152,7 @@ function burn(address from, uint256 amount) external onlyRole(PROTOCOL_ROLE) whe
 
 Pauses all token transfers and minting
 
-*Prevents all token movements in case of emergency*
-
-**Notes:**
-- access: Restricted to PAUSER_ROLE
-
-- state-changes: Sets the paused state to true
-
-- events: Emits a Paused event from PausableUpgradeable
+*Only callable by addresses with PAUSER_ROLE*
 
 
 ```solidity
@@ -181,28 +163,63 @@ function pause() external onlyRole(PAUSER_ROLE);
 
 Unpauses token transfers and minting
 
-*Restores normal token operation after emergency pause*
-
-**Notes:**
-- access: Restricted to PAUSER_ROLE
-
-- state-changes: Sets the paused state to false
-
-- events: Emits an Unpaused event from PausableUpgradeable
+*Only callable by addresses with PAUSER_ROLE*
 
 
 ```solidity
 function unpause() external onlyRole(PAUSER_ROLE);
 ```
 
+### scheduleUpgrade
+
+Schedules an upgrade to a new implementation with timelock
+
+*Only callable by addresses with UPGRADER_ROLE*
+
+
+```solidity
+function scheduleUpgrade(address newImplementation) external onlyRole(UPGRADER_ROLE);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`newImplementation`|`address`|Address of the new implementation contract|
+
+
+### cancelUpgrade
+
+Cancels a previously scheduled upgrade
+
+*Only callable by addresses with UPGRADER_ROLE*
+
+
+```solidity
+function cancelUpgrade() external onlyRole(UPGRADER_ROLE);
+```
+
+### upgradeTimelockRemaining
+
+Returns the remaining time before a scheduled upgrade can be executed
+
+*Returns 0 if no upgrade is scheduled or if the timelock has expired*
+
+
+```solidity
+function upgradeTimelockRemaining() external view returns (uint256);
+```
+**Returns**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`<none>`|`uint256`|timeRemaining The time remaining in seconds|
+
+
 ### decimals
 
 Returns the number of decimals used for token amounts
 
-*Overrides the default ERC20 implementation which uses 18 decimals*
-
-**Note:**
-state-changes: None, view-only function
+*Overrides the default ERC20 implementation to use 6 decimals to match USDC*
 
 
 ```solidity
@@ -212,17 +229,14 @@ function decimals() public pure override returns (uint8);
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint8`|The number of decimals (6 to match USDC)|
+|`<none>`|`uint8`|The number of decimals (6)|
 
 
 ### _update
 
-*Override to enforce pause state during transfers*
+Override to enforce pause state during transfers
 
-**Notes:**
-- state-changes: None, modifies underlying token transfer behavior
-
-- validation-rules: Reverts if contract is paused
+*Reverts if the contract is paused*
 
 
 ```solidity
@@ -239,16 +253,9 @@ function _update(address from, address to, uint256 value) internal override when
 
 ### _authorizeUpgrade
 
-*Authorizes an upgrade to a new implementation*
+Authorizes an upgrade to a new implementation
 
-**Notes:**
-- access: Restricted to UPGRADER_ROLE
-
-- state-changes: 
-- Increments the contract version
-- Upgrades implementation contract (via UUPSUpgradeable)
-
-- events: Emits Upgrade event with upgrader and new implementation addresses
+*Implements the upgrade verification and authorization logic*
 
 
 ```solidity
@@ -265,9 +272,6 @@ function _authorizeUpgrade(address newImplementation) internal override onlyRole
 ### Initialized
 Emitted when the contract is initialized
 
-**Note:**
-access-control: This event is emitted once during initialization
-
 
 ```solidity
 event Initialized(address indexed admin);
@@ -282,9 +286,6 @@ event Initialized(address indexed admin);
 ### Upgrade
 Emitted when the contract is upgraded
 
-**Note:**
-access-control: This event is emitted during authorized upgrades
-
 
 ```solidity
 event Upgrade(address indexed upgrader, address indexed implementation);
@@ -296,4 +297,105 @@ event Upgrade(address indexed upgrader, address indexed implementation);
 |----|----|-----------|
 |`upgrader`|`address`|Address that triggered the upgrade|
 |`implementation`|`address`|Address of the new implementation contract|
+
+### UpgradeScheduled
+Emitted when an upgrade is scheduled
+
+
+```solidity
+event UpgradeScheduled(
+    address indexed scheduler, address indexed implementation, uint64 scheduledTime, uint64 effectiveTime
+);
+```
+
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`scheduler`|`address`|The address scheduling the upgrade|
+|`implementation`|`address`|The new implementation contract address|
+|`scheduledTime`|`uint64`|The timestamp when the upgrade was scheduled|
+|`effectiveTime`|`uint64`|The timestamp when the upgrade can be executed|
+
+### UpgradeCancelled
+Emitted when a scheduled upgrade is cancelled
+
+
+```solidity
+event UpgradeCancelled(address indexed canceller, address indexed implementation);
+```
+
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`canceller`|`address`|The address that cancelled the upgrade|
+|`implementation`|`address`|The implementation address that was cancelled|
+
+## Errors
+### ZeroAddressNotAllowed
+Thrown when attempting to set a critical address to the zero address
+
+
+```solidity
+error ZeroAddressNotAllowed();
+```
+
+### UpgradeTimelockActive
+Thrown when attempting to execute an upgrade before timelock expires
+
+
+```solidity
+error UpgradeTimelockActive(uint256 timeRemaining);
+```
+
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`timeRemaining`|`uint256`|The time remaining until the upgrade can be executed|
+
+### UpgradeNotScheduled
+Thrown when attempting to execute an upgrade that wasn't scheduled
+
+
+```solidity
+error UpgradeNotScheduled();
+```
+
+### ImplementationMismatch
+Thrown when implementation address doesn't match scheduled upgrade
+
+
+```solidity
+error ImplementationMismatch(address scheduledImpl, address attemptedImpl);
+```
+
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`scheduledImpl`|`address`|The address that was scheduled for upgrade|
+|`attemptedImpl`|`address`|The address that was attempted to be used|
+
+## Structs
+### UpgradeRequest
+Structure to store pending upgrade details
+
+
+```solidity
+struct UpgradeRequest {
+    address implementation;
+    uint64 scheduledTime;
+    bool exists;
+}
+```
+
+**Properties**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`implementation`|`address`|Address of the new implementation contract|
+|`scheduledTime`|`uint64`|Timestamp when the upgrade was scheduled|
+|`exists`|`bool`|Boolean flag indicating if an upgrade is currently scheduled|
 

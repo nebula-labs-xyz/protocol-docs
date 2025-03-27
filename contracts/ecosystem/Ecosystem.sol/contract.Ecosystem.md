@@ -1,105 +1,17 @@
 # Ecosystem
-[Git Source](https://github.com/nebula-labs-xyz/lendefi-dao/blob/05bc99b130950ac71cca48b96856e5ce17a94027/contracts/ecosystem/Ecosystem.sol)
-
-
-# Comprehensive Review of the Lendefi DAO Ecosystem Contract
-
-## Overview
-
-The Lendefi DAO Ecosystem contract is a sophisticated governance contract responsible for managing token distribution, rewards, burning, and partner vesting within the Lendefi ecosystem. This contract is implemented using the UUPS upgradeable pattern, providing flexibility for future improvements while maintaining a strong security posture through a comprehensive role-based access control system.
-
-## Architecture & Design
-
-### Contract Structure
-- **Inheritance**: The contract inherits from multiple OpenZeppelin upgradeable contracts (Initializable, PausableUpgradeable, AccessControlUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable)
-- **Implementation**: The contract implements the IECOSYSTEM interface
-- **Token Integration**: It interacts with a governance token implementing the ILENDEFI interface
-
-### Storage Layout
-The contract maintains well-organized state variables:
-- Token instance and timelock address
-- Supply tracking (reward, airdrop, partnership)
-- Issuance tracking (rewards, airdrops, partnerships, burns)
-- Maximum limits (max reward, max burn)
-- Version control for upgrades
-- Partner vesting contract mapping
-
-### Role-Based Access Control
-The contract implements a robust role system:
-- BURNER_ROLE: Controls token burning
-- PAUSER_ROLE: Controls pause/unpause functionality
-- UPGRADER_ROLE: Controls contract upgradability
-- REWARDER_ROLE: Controls reward distribution
-- MANAGER_ROLE: Controls partner management and configuration updates
-- DEFAULT_ADMIN_ROLE: Grants/revokes roles (assigned to guardian)
-
-## Functionality Analysis
-
-### Token Distribution
-- **Airdrop Function**: Distributes equal amounts to multiple recipients
-  - Appropriate input validation (min amount, recipient count)
-  - Gas-aware implementation (4000 recipient limit)
-  - Proper accounting (issuedAirDrop tracking)
-  - Zero address handling in recipients array
-
-- **Reward Function**: Distributes tokens to individual addresses
-  - Checks maximum reward limits
-  - Ensures sufficient reward supply
-  - Updates accounting
-
-### Token Management
-- **Burn Function**: Permanently removes tokens from circulation
-  - Enforces maximum burn limits and supply constraints
-  - Updates both rewardSupply and burnedAmount for accurate accounting
-  - Calls the token's burn function directly
-
-### Partner Management
-- **Add Partner**: Creates vesting contracts for partners
-  - Prevents duplicate partners
-  - Enforces minimum/maximum allocation limits (100 ether to 50% of supply)
-  - Creates dedicated vesting contract with cliff and duration parameters
-
-- **Cancel Partnership**: Terminates vesting contracts
-  - Restricted to timelock (governance)
-  - Improved accounting through return value tracking
-  - Tokens flow from vesting→ecosystem→timelock
-
-### Configuration Management
-- **Update Max Reward**: Configures reward limits
-  - Prevents excessive values (maximum 5% of remaining supply)
-  - Maintains proper event logs of changes
-
-- **Update Max Burn**: Configures burn limits
-  - Prevents excessive values (maximum 10% of remaining supply)
-  - Maintains proper event logs of changes
-
-## Security Analysis
-
-### Strengths
-1. **Comprehensive Access Control**: Well-defined roles with proper separation of concerns
-2. **Reentrancy Protection**: All state-changing functions use ReentrancyGuard
-3. **Input Validation**: Thorough validation with meaningful error messages
-4. **Event Emissions**: Events for all critical state changes
-5. **Safe Token Handling**: Uses SafeERC20 for all token operations
-6. **Upgradability**: UUPS pattern with proper authorization checks and version tracking
-7. **Storage Gap**: Includes `__gap` for future storage additions
-8. **Partnership Supply Protections**: Both individual and total limits on partnership allocations
-
-
+[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/d0b15d8d57415f38e3db367bb9e72ba910580c33/contracts/ecosystem/Ecosystem.sol)
 
 **Inherits:**
 [IECOSYSTEM](/contracts/interfaces/IEcosystem.sol/interface.IECOSYSTEM.md), Initializable, PausableUpgradeable, AccessControlUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable
 
 Ecosystem contract handles airdrops, rewards, burning, and partnerships
 
-*Implements a secure and upgradeable DAO ecosystem with improved accounting*
+*Implements a secure and upgradeable DAO ecosystem*
 
 **Notes:**
 - security-contact: security@nebula-labs.xyz
 
 - copyright: Copyright (c) 2025 Nebula Holding Inc. All rights reserved.
-
-- oz-upgrades: 
 
 
 ## State Variables
@@ -148,6 +60,33 @@ bytes32 internal constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
 ```
 
 
+### MIN_VESTING_DURATION
+*Minimum required vesting duration (30 days)*
+
+
+```solidity
+uint256 internal constant MIN_VESTING_DURATION = 30 days;
+```
+
+
+### MAX_VESTING_DURATION
+*Maximum allowed vesting duration (10 years)*
+
+
+```solidity
+uint256 internal constant MAX_VESTING_DURATION = 3650 days;
+```
+
+
+### UPGRADE_TIMELOCK_DURATION
+*Upgrade timelock duration (3 days)*
+
+
+```solidity
+uint256 private constant UPGRADE_TIMELOCK_DURATION = 3 days;
+```
+
+
 ### tokenInstance
 *governance token instance*
 
@@ -185,7 +124,7 @@ uint256 public issuedReward;
 
 
 ### burnedAmount
-*burned reward amount*
+*burned reward amount (tracked separately for transparency)*
 
 
 ```solidity
@@ -239,7 +178,7 @@ uint256 public issuedPartnership;
 
 
 ### version
-*number of UUPS upgrades*
+*number of UUPS upgrades - packed with other variables to save gas*
 
 
 ```solidity
@@ -265,19 +204,54 @@ mapping(address partner => address vesting) public vestingContracts;
 ```
 
 
+### pendingUpgrade
+*Pending upgrade information*
+
+
+```solidity
+UpgradeRequest public pendingUpgrade;
+```
+
+
 ### __gap
 
 ```solidity
-uint256[49] private __gap;
+uint256[16] private __gap;
 ```
 
 
 ## Functions
+### nonZeroAmount
+
+*Modifier to check for non-zero amounts*
+
+
+```solidity
+modifier nonZeroAmount(uint256 amount);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`amount`|`uint256`|The amount to validate|
+
+
+### nonZeroAddress
+
+*Modifier to check for non-zero addresses*
+
+
+```solidity
+modifier nonZeroAddress(address addr);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`addr`|`address`|The address to validate|
+
+
 ### constructor
-
-*Custom error types*
-
-*Events*
 
 **Note:**
 oz-upgrades-unsafe-allow: constructor
@@ -298,33 +272,43 @@ receive() external payable;
 
 ### initialize
 
-Sets up the initial state of the contract, including roles and token supplies.
+Initializes the Ecosystem contract with core dependencies and configurations
 
-*Initializes the ecosystem contract.*
+*Sets up the contract with initial token allocations, roles, and limits*
 
 **Notes:**
-- requires: All input addresses must not be zero.
+- security: Uses initializer modifier to prevent multiple initializations
 
-- requires-role: DEFAULT_ADMIN_ROLE for the guardian.
+- security-roles: Grants the following roles:
+- DEFAULT_ADMIN_ROLE to timelock
+- MANAGER_ROLE to timelock
+- PAUSER_ROLE to timelock
+- UPGRADER_ROLE to both timelock and multisig
 
-- requires-role: PAUSER_ROLE for the pauser.
+- allocation: Configures token allocations as follows:
+- 26% for rewards
+- 10% for airdrops
+- 8% for partnerships
 
-- events-emits: {Initialized} event.
+- limits: Sets initial limits:
+- maxReward: 0.1% of reward supply
+- maxBurn: 2% of reward supply
 
-- throws: ZeroAddressDetected if any of the input addresses are zero.
+- events-emits: {Initialized} when initialization is complete
+
+- throws: ZeroAddressDetected if any input address is zero
 
 
 ```solidity
-function initialize(address token, address timelockAddr, address guardian, address pauser) external initializer;
+function initialize(address token, address timelockAddr, address multisig) external initializer;
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`token`|`address`|The address of the governance token.|
-|`timelockAddr`|`address`|The address of the timelock controller for partner vesting cancellation.|
-|`guardian`|`address`|The address of the guardian (admin).|
-|`pauser`|`address`|The address of the pauser.|
+|`token`|`address`|Address of the LENDEFI token contract|
+|`timelockAddr`|`address`|Address of the timelock contract that will have admin control|
+|`multisig`|`address`|Address of the multisig wallet that will have upgrade rights|
 
 
 ### pause
@@ -358,6 +342,50 @@ Resumes all contract operations.
 ```solidity
 function unpause() external onlyRole(PAUSER_ROLE);
 ```
+
+### scheduleUpgrade
+
+Only callable by an address with UPGRADER_ROLE
+
+*Schedules an upgrade to a new implementation*
+
+
+```solidity
+function scheduleUpgrade(address newImplementation)
+    external
+    onlyRole(UPGRADER_ROLE)
+    nonZeroAddress(newImplementation);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`newImplementation`|`address`|Address of the new implementation|
+
+
+### emergencyWithdrawToken
+
+Only callable by addresses with MANAGER_ROLE
+
+Always sends all available tokens to the timelock controller
+
+*Emergency function to withdraw all tokens to the timelock*
+
+**Notes:**
+- throws: ZeroAddress if token address is zero
+
+- throws: ZeroBalance if contract has no token balance
+
+
+```solidity
+function emergencyWithdrawToken(address token) external nonReentrant onlyRole(MANAGER_ROLE) nonZeroAddress(token);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`token`|`address`|The ERC20 token to withdraw|
+
 
 ### airdrop
 
@@ -421,13 +449,21 @@ Distributes a specified amount of tokens to a beneficiary address.
 
 - throws: InvalidAmount if the amount is 0
 
+- throws: InvalidAddress if the recipient address is 0
+
 - throws: RewardLimit if the amount exceeds the maximum reward limit
 
 - throws: RewardSupplyLimit if the total rewarded amount exceeds the reward supply
 
 
 ```solidity
-function reward(address to, uint256 amount) external nonReentrant whenNotPaused onlyRole(REWARDER_ROLE);
+function reward(address to, uint256 amount)
+    external
+    nonReentrant
+    whenNotPaused
+    onlyRole(REWARDER_ROLE)
+    nonZeroAmount(amount)
+    nonZeroAddress(to);
 ```
 **Parameters**
 
@@ -464,7 +500,7 @@ Burns a specified amount of tokens from the reward supply.
 
 
 ```solidity
-function burn(uint256 amount) external nonReentrant whenNotPaused onlyRole(BURNER_ROLE);
+function burn(uint256 amount) external nonReentrant whenNotPaused nonZeroAmount(amount) onlyRole(BURNER_ROLE);
 ```
 **Parameters**
 
@@ -488,6 +524,8 @@ Adds a new partner by creating a cancellable vesting contract and transferring t
 
 - requires: Amount must be between 100 ether and half of the partnership supply
 
+- requires: Duration must be within reasonable bounds
+
 - requires: Total issued partnership tokens must not exceed the partnership supply
 
 - events-emits: {AddPartner} event
@@ -498,6 +536,8 @@ Adds a new partner by creating a cancellable vesting contract and transferring t
 
 - throws: InvalidAmount if the amount is not within the valid range
 
+- throws: InvalidVestingSchedule if duration is not within reasonable bounds
+
 - throws: AmountExceedsSupply if the total issued partnership tokens exceed the partnership supply
 
 
@@ -506,7 +546,8 @@ function addPartner(address partner, uint256 amount, uint256 cliff, uint256 dura
     external
     nonReentrant
     whenNotPaused
-    onlyRole(MANAGER_ROLE);
+    onlyRole(MANAGER_ROLE)
+    nonZeroAddress(partner);
 ```
 **Parameters**
 
@@ -522,20 +563,22 @@ function addPartner(address partner, uint256 amount, uint256 cliff, uint256 dura
 
 This can only be called by the timelock (governance)
 
-This can only be called by the timelock (governance)
-
-*Cancels a partner vesting contract*
-
 *Cancels a partner vesting contract*
 
 **Notes:**
 - requires: The caller must be the timelock
 
+- requires: The partner must have a valid vesting contract
+
 - emits: CancelPartnership event on successful cancellation
+
+- throws: CallerNotAllowed if the caller is not the timelock
+
+- throws: InvalidAddress if the partner has no vesting contract
 
 
 ```solidity
-function cancelPartnership(address partner) external;
+function cancelPartnership(address partner) external nonZeroAddress(partner) onlyRole(MANAGER_ROLE);
 ```
 **Parameters**
 
@@ -543,6 +586,17 @@ function cancelPartnership(address partner) external;
 |----|----|-----------|
 |`partner`|`address`|The address of the partner whose vesting should be cancelled|
 
+
+### cancelUpgrade
+
+Cancels a previously scheduled upgrade
+
+*Only callable by addresses with UPGRADER_ROLE*
+
+
+```solidity
+function cancelUpgrade() external onlyRole(UPGRADER_ROLE);
+```
 
 ### updateMaxReward
 
@@ -567,7 +621,11 @@ Allows updating the maximum reward that can be issued in a single transaction.
 
 
 ```solidity
-function updateMaxReward(uint256 newMaxReward) external whenNotPaused onlyRole(MANAGER_ROLE);
+function updateMaxReward(uint256 newMaxReward)
+    external
+    whenNotPaused
+    onlyRole(MANAGER_ROLE)
+    nonZeroAmount(newMaxReward);
 ```
 **Parameters**
 
@@ -599,13 +657,28 @@ Allows updating the maximum amount that can be burned in a single transaction.
 
 
 ```solidity
-function updateMaxBurn(uint256 newMaxBurn) external whenNotPaused onlyRole(MANAGER_ROLE);
+function updateMaxBurn(uint256 newMaxBurn) external whenNotPaused onlyRole(MANAGER_ROLE) nonZeroAmount(newMaxBurn);
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
 |`newMaxBurn`|`uint256`|The new maximum burn amount.|
+
+
+### upgradeTimelockRemaining
+
+*Returns the remaining time before a scheduled upgrade can be executed*
+
+
+```solidity
+function upgradeTimelockRemaining() external view returns (uint256);
+```
+**Returns**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`<none>`|`uint256`|The time remaining in seconds, or 0 if no upgrade is scheduled or timelock has passed|
 
 
 ### availableRewardSupply
@@ -655,14 +728,7 @@ function availablePartnershipSupply() external view returns (uint256);
 
 ### _authorizeUpgrade
 
-This function is called during the upgrade process to authorize the new implementation.
-
-*Authorizes an upgrade to a new implementation.*
-
-**Notes:**
-- requires-role: UPGRADER_ROLE
-
-- events-emits: {Upgrade} event with upgrader, implementation and version
+*Authorizes an upgrade to a new implementation with timelock enforcement*
 
 
 ```solidity
@@ -672,6 +738,6 @@ function _authorizeUpgrade(address newImplementation) internal override onlyRole
 
 |Name|Type|Description|
 |----|----|-----------|
-|`newImplementation`|`address`|The address of the new implementation contract.|
+|`newImplementation`|`address`|The address of the new implementation contract|
 
 

@@ -1,88 +1,12 @@
 # TeamManager
-[Git Source](https://github.com/nebula-labs-xyz/lendefi-dao/blob/07f5cb7369219dbffd648091ffbddb6d70a0157c/contracts/ecosystem/TeamManager.sol)
-
-## Overview
-The TeamManager contract is a specialized token distribution system for the Lendefi DAO, designed to handle team member compensation through configurable vesting schedules. It allocates 18% of the total token supply to team members with controlled vesting parameters, providing both flexibility and security in managing team token allocations.
-
-## Architecture
-
-### Contract Structure
-- **Inheritance Model**: Implements a comprehensive inheritance structure combining upgradeability, access control, reentrancy protection, and pausability
-- **Allocation Management**: Tracks and enforces a fixed percentage (18%) allocation of total token supply
-- **Individual Vesting**: Creates separate vesting contract instances for each team member
-- **Configurable Parameters**: Allows customization of vesting schedules within predefined constraints
-
-### Token Distribution Model
-- **Fixed Allocation**: 18% of total token supply reserved for team members
-- **Vesting Parameters**:
-  - Cliff periods: 90-365 days (3 months to 1 year)
-  - Vesting durations: 365-1460 days (1-4 years)
-- **Custom Vesting Contracts**: Deploys dedicated TeamVesting contracts for each member
-
-## Technical Assessment
-
-### Strengths
-
-1. **Security Features**:
-   - Role-based access control with distinct roles (PAUSER_ROLE, MANAGER_ROLE, UPGRADER_ROLE)
-   - Reentrancy protection on fund-moving functions
-   - Input validation with clear error messages
-   - Pausability for emergency situations
-   - UUPS upgrade pattern with version tracking
-
-2. **Parameter Validation**:
-   - Zero-address validation for critical parameters
-   - Bounds checking for cliff and duration values
-   - Allocation limit enforcement
-   - Duplicate beneficiary prevention
-
-3. **Implementation Quality**:
-   - Clean function organization with logical separation
-   - Event emissions for critical actions
-   - Explicit error messages with custom errors
-   - Safe token transfers using SafeERC20
-
-4. **Governance Integration**:
-   - Timelock control for key management functions
-   - Guardian role for emergency actions
-   - Version tracking for upgrade transparency
-
-### Potential Concerns
-
-1. **Limited Management Functions**:
-   - No mechanism to remove or adjust team member allocations
-   - No recovery function for incorrect allocations
-   - No batch operations for efficient team management
-
-2. **Centralization Risks**:
-   - Heavy reliance on timelock and guardian roles
-   - No time-delayed operations for sensitive functions
-
-3. **Vesting Limitations**:
-   - Once created, vesting contracts cannot be modified
-   - No partial vesting revocation capability for exiting team members
-   - No mechanism to handle team restructuring events
-
-4. **Technical Considerations**:
-   - TeamVesting contract dependency is critical but separate
-   - No explicit handling for token rebasing or fee-on-transfer tokens
-   - Custom error messages not fully standardized
-
-## Code Quality & Documentation
-
-- **Documentation**: Excellent NatSpec documentation with detailed parameter descriptions
-- **Security Annotations**: Clear security-related annotations in comments
-- **Event Emissions**: Appropriate event for critical state changes
-- **Error Handling**: Consistent use of custom errors with descriptive messages
-- **Code Organization**: Well-structured with logical sections and clear naming
-
+[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/d0b15d8d57415f38e3db367bb9e72ba910580c33/contracts/ecosystem/TeamManager.sol)
 
 **Inherits:**
 [ITEAMMANAGER](/contracts/interfaces/ITeamManager.sol/interface.ITEAMMANAGER.md), Initializable, PausableUpgradeable, AccessControlUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable
 
 Creates and deploys team vesting contracts
 
-*Implements a secure and upgradeable team manager for the DAO*
+*Implements a secure and upgradeable team manager with upgrade timelock*
 
 **Notes:**
 - security-contact: security@nebula-labs.xyz
@@ -103,20 +27,20 @@ uint256 private constant TEAM_ALLOCATION_PERCENT = 18;
 
 
 ### MIN_CLIFF
-*Minimum cliff period (6 months)*
+*Minimum cliff period (3 months)*
 
 
 ```solidity
-uint64 public constant MIN_CLIFF = 90 days;
+uint64 private constant MIN_CLIFF = 90 days;
 ```
 
 
 ### MAX_CLIFF
-*Maximum cliff period (2 years)*
+*Maximum cliff period (1 year)*
 
 
 ```solidity
-uint64 public constant MAX_CLIFF = 365 days;
+uint64 private constant MAX_CLIFF = 365 days;
 ```
 
 
@@ -125,7 +49,7 @@ uint64 public constant MAX_CLIFF = 365 days;
 
 
 ```solidity
-uint64 public constant MIN_DURATION = 365 days;
+uint64 private constant MIN_DURATION = 365 days;
 ```
 
 
@@ -134,7 +58,16 @@ uint64 public constant MIN_DURATION = 365 days;
 
 
 ```solidity
-uint64 public constant MAX_DURATION = 1460 days;
+uint64 private constant MAX_DURATION = 1460 days;
+```
+
+
+### UPGRADE_TIMELOCK_DURATION
+*Upgrade timelock duration (4 days)*
+
+
+```solidity
+uint256 private constant UPGRADE_TIMELOCK_DURATION = 3 days;
 ```
 
 
@@ -210,6 +143,15 @@ uint32 public version;
 ```
 
 
+### pendingUpgrade
+*Pending upgrade information*
+
+
+```solidity
+UpgradeRequest public pendingUpgrade;
+```
+
+
 ### allocations
 *token allocations to team members*
 
@@ -229,23 +171,44 @@ mapping(address src => address vesting) public vestingContracts;
 
 
 ### __gap
-*gap for future storage variables*
+*gap for future storage variables (50 - 8 existing variables = 42)*
 
 
 ```solidity
-uint256[50] private __gap;
+uint256[22] private __gap;
 ```
 
 
 ## Functions
-### receive
+### nonZeroAddress
 
-*Prevents receiving Ether*
+*Modifier to check for non-zero address*
 
 
 ```solidity
-receive() external payable;
+modifier nonZeroAddress(address addr);
 ```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`addr`|`address`|The address to check|
+
+
+### nonZeroAmount
+
+*Modifier to check for non-zero amount*
+
+
+```solidity
+modifier nonZeroAmount(uint256 amount);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`amount`|`uint256`|The amount to check|
+
 
 ### constructor
 
@@ -257,29 +220,24 @@ oz-upgrades-unsafe-allow: constructor
 constructor();
 ```
 
+### receive
+
+*Prevents receiving Ether*
+
+
+```solidity
+receive() external payable;
+```
+
 ### initialize
 
 Initializes the team manager contract
 
-*Sets up the initial state of the contract with core functionality:
-1. Initializes upgradeable base contracts
-2. Sets up access control roles
-3. Configures token and supply parameters*
-
-**Notes:**
-- requires-role: None - can only be called once during initialization
-
-- security: Implements initializer modifier to prevent re-initialization
-
-- security: Validates all input addresses are non-zero
-
-- events-emits: Initialized(msg.sender)
-
-- throws: CustomError("ZERO_ADDRESS_DETECTED") if any input address is zero
+*Sets up the initial state of the contract with core functionality*
 
 
 ```solidity
-function initialize(address token, address timelock_, address guardian) external initializer;
+function initialize(address token, address timelock_, address multisig) external initializer;
 ```
 **Parameters**
 
@@ -287,7 +245,7 @@ function initialize(address token, address timelock_, address guardian) external
 |----|----|-----------|
 |`token`|`address`|The address of the ecosystem token contract|
 |`timelock_`|`address`|The address of the timelock controller|
-|`guardian`|`address`|The address of the admin who will receive DEFAULT_ADMIN_ROLE|
+|`multisig`|`address`|The address receiving UPGRADER_ROLE|
 
 
 ### pause
@@ -295,15 +253,6 @@ function initialize(address token, address timelock_, address guardian) external
 Pauses all contract operations
 
 *Prevents execution of state-modifying functions*
-
-**Notes:**
-- requires-role: PAUSER_ROLE
-
-- security: Inherits OpenZeppelin's PausableUpgradeable
-
-- events-emits: {Paused} event from PausableUpgradeable
-
-- throws: Unauthorized if caller lacks PAUSER_ROLE
 
 
 ```solidity
@@ -316,15 +265,6 @@ Resumes all contract operations
 
 *Re-enables execution of state-modifying functions*
 
-**Notes:**
-- requires-role: PAUSER_ROLE
-
-- security: Inherits OpenZeppelin's PausableUpgradeable
-
-- events-emits: {Unpaused} event from PausableUpgradeable
-
-- throws: Unauthorized if caller lacks PAUSER_ROLE
-
 
 ```solidity
 function unpause() external onlyRole(PAUSER_ROLE);
@@ -334,32 +274,15 @@ function unpause() external onlyRole(PAUSER_ROLE);
 
 *Create and fund a vesting contract for a new team member*
 
-**Notes:**
-- requires: beneficiary must not be zero address
-
-- requires: cliff must be between MIN_CLIFF and MAX_CLIFF
-
-- requires: duration must be between MIN_DURATION and MAX_DURATION
-
-- requires: amount must not exceed remaining supply
-
-- throws: CustomError("SUPPLY_LIMIT") if allocation exceeds supply
-
-- throws: CustomError("INVALID_BENEFICIARY") if beneficiary is zero address
-
-- throws: CustomError("INVALID_CLIFF") if cliff period is invalid
-
-- throws: CustomError("INVALID_DURATION") if duration is invalid
-
-- throws: CustomError("ALREADY_ADDED") if beneficiary already has allocation
-
 
 ```solidity
 function addTeamMember(address beneficiary, uint256 amount, uint256 cliff, uint256 duration)
     external
     nonReentrant
     whenNotPaused
-    onlyRole(MANAGER_ROLE);
+    onlyRole(MANAGER_ROLE)
+    nonZeroAddress(beneficiary)
+    nonZeroAmount(amount);
 ```
 **Parameters**
 
@@ -371,27 +294,55 @@ function addTeamMember(address beneficiary, uint256 amount, uint256 cliff, uint2
 |`duration`|`uint256`|The vesting duration in seconds after cliff|
 
 
+### scheduleUpgrade
+
+*Schedules an upgrade to a new implementation*
+
+
+```solidity
+function scheduleUpgrade(address newImplementation)
+    external
+    nonZeroAddress(newImplementation)
+    onlyRole(UPGRADER_ROLE);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`newImplementation`|`address`|Address of the new implementation|
+
+
+### cancelUpgrade
+
+Cancels a previously scheduled upgrade
+
+*Only callable by addresses with UPGRADER_ROLE*
+
+
+```solidity
+function cancelUpgrade() external onlyRole(UPGRADER_ROLE);
+```
+
+### upgradeTimelockRemaining
+
+*Returns the remaining time before a scheduled upgrade can be executed*
+
+
+```solidity
+function upgradeTimelockRemaining() external view returns (uint256);
+```
+**Returns**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`<none>`|`uint256`|timeRemaining The time remaining in seconds, or 0 if no upgrade is scheduled or timelock has passed|
+
+
 ### _authorizeUpgrade
 
-Authorizes and processes contract upgrades
+Authorizes and processes contract upgrades with timelock enforcement
 
 *Internal override for UUPS upgrade authorization*
-
-*Performs:
-1. Validates caller has UPGRADER_ROLE
-2. Increments contract version
-3. Emits upgrade event with details*
-
-**Notes:**
-- throws: Unauthorized if caller lacks UPGRADER_ROLE
-
-- emits: Upgrade event with upgrader address and new implementation
-
-- security: Role-based access control via UPGRADER_ROLE
-
-- security: Version tracking for upgrade management
-
-- security: Inherits OpenZeppelin's UUPSUpgradeable pattern
 
 
 ```solidity

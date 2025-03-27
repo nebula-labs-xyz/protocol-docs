@@ -1,62 +1,5 @@
 # LendefiAssets
-[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/a5a218c0db8bfb52cb836dc7d721fd999f5de3c1/contracts/lender/LendefiAssets.sol)
-
-# LendefiAssets Contract: Executive Summary
-
-## Overview
-The `LendefiAssets` contract serves as the asset management and price oracle system for the Lendefi protocol, providing critical infrastructure for risk assessment, collateral valuation, and protocol security. This sophisticated system manages asset configurations, oracle integrations, and pricing mechanisms, forming the foundation for Lendefi's lending operations.
-
-## Executive Summary
-The `LendefiAssets` contract implements a robust asset management system with multi-layered price discovery, security controls, and governance mechanisms. It features a dual-oracle approach with circuit breakers, tiered collateral systems, and comprehensive upgrade safeguards. The contract efficiently manages asset listings, risk parameters, and protocol-wide settings through a role-based access control system with timelock protections.
-
-## Core Functionality
-
-### Asset Management
-- **Multi-tiered Collateral System**: Assets are categorized into four risk tiers (STABLE, CROSS_A, CROSS_B, ISOLATED)
-- **Dynamic Supply Caps**: Each asset has configurable supply limits to prevent concentration risk
-- **Isolation Mode**: Higher-risk assets can be designated as "isolated" with special debt caps
-- **Risk Parameters**: Customizable borrow thresholds, liquidation thresholds, and fees per asset
-
-### Sophisticated Price Discovery
-- **Multi-Oracle Strategy**: Primary (typically Chainlink) and secondary (Uniswap V3 TWAP) oracles
-- **Median Price Calculation**: Combines multiple oracle feeds for increased reliability
-- **Dynamic TWAP Periods**: Configurable time-weighted average prices to mitigate manipulation
-- **Oracle Fallbacks**: Graceful handling of oracle failures with priority fallback mechanisms
-
-### Price Feed Security
-- **Circuit Breakers**: Automatic detection and mitigation of price feed anomalies
-- **Freshness Checks**: Validation of oracle data recency and response timeliness
-- **Volatility Guards**: Protection against sudden price movements exceeding thresholds
-- **Cross-Oracle Validation**: Detection of significant deviations between oracle sources
-- **Admin Override**: Emergency circuit breaker capability for manual intervention
-
-### Governance & Access Control
-- **Role-Based Access**: Distinct roles for routine management vs. critical functions
-- **Timelocked Upgrades**: 3-day waiting period for contract implementation changes
-- **Emergency Controls**: Dedicated pauser and circuit breaker roles for swift response
-- **Separation of Duties**: Different roles for daily operations vs. critical security functions
-
-## Architecture Highlights
-
-The contract employs a modular design with:
-- Clear separation between asset configuration and price discovery logic
-- Extensive event emissions for off-chain monitoring and transparency
-- Comprehensive validation checks throughout all state-changing operations
-- Efficient storage patterns to minimize gas costs for frequent operations
-- Proxy-based upgradeability with strong security controls
-
-## Risk Management Features
-
-The `LendefiAssets` contract provides several layers of protocol risk protection:
-- Price manipulation resistance through multi-oracle validation
-- Configurable protocol-wide oracle freshness and volatility thresholds
-- Asset-specific risk parameters tailored to each collateral type
-- Automatic circuit breakers that trigger during extreme market conditions
-- Supply caps to limit protocol exposure to any single asset
-
----
-
-The LendefiAssets contract forms the foundation of the protocol's risk management system, ensuring accurate asset valuation while providing multiple layers of security against market volatility, oracle failures, and potential exploitation attempts.
+[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/d0b15d8d57415f38e3db367bb9e72ba910580c33/contracts/lender/LendefiAssets.sol)
 
 **Inherits:**
 [IASSETS](/contracts/interfaces/IASSETS.sol/interface.IASSETS.md), Initializable, AccessControlUpgradeable, ReentrancyGuardUpgradeable, PausableUpgradeable, UUPSUpgradeable
@@ -77,68 +20,6 @@ Manages asset configurations, listings, and oracle integrations
 
 
 ## State Variables
-### USDC_ETH_POOL
-
-```solidity
-address public constant USDC_ETH_POOL = 0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640;
-```
-
-
-### MANAGER_ROLE
-Role that allows managing asset configurations and oracle settings
-
-*Hash of "MANAGER_ROLE"*
-
-
-```solidity
-bytes32 internal constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
-```
-
-
-### UPGRADER_ROLE
-Role that allows initiating and executing contract upgrades
-
-*Hash of "UPGRADER_ROLE"*
-
-
-```solidity
-bytes32 internal constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
-```
-
-
-### PAUSER_ROLE
-Role that allows pausing and unpausing contract operations
-
-*Hash of "PAUSER_ROLE"*
-
-
-```solidity
-bytes32 internal constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
-```
-
-
-### CIRCUIT_BREAKER_ROLE
-Role that can activate or deactivate circuit breakers for assets
-
-*Hash of "CIRCUIT_BREAKER_ROLE"*
-
-
-```solidity
-bytes32 internal constant CIRCUIT_BREAKER_ROLE = keccak256("CIRCUIT_BREAKER_ROLE");
-```
-
-
-### UPGRADE_TIMELOCK_DURATION
-Duration of the timelock for upgrade operations
-
-*Set to 3 days to allow sufficient time for review*
-
-
-```solidity
-uint256 public constant UPGRADE_TIMELOCK_DURATION = 3 days;
-```
-
-
 ### version
 Current version of the contract implementation
 
@@ -261,10 +142,23 @@ uint256[22] private __gap;
 ## Functions
 ### onlyListedAsset
 
+Requires that the asset exists in the protocol's listed assets
+
+*Modifier to guard functions that operate on listed assets*
+
+**Note:**
+reverts: AssetNotListed if the asset is not in the listed assets set
+
 
 ```solidity
 modifier onlyListedAsset(address asset);
 ```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`asset`|`address`|The address of the asset to check|
+
 
 ### nonZeroAddress
 
@@ -323,30 +217,7 @@ function initialize(address timelock, address multisig, address usdc_) external 
 |----|----|-----------|
 |`timelock`|`address`|Address of the timelock contract that will have admin privileges|
 |`multisig`|`address`|Address of the multisig wallet for emergency controls|
-|`usdc_`|`address`||
-
-
-### updateUniswapOracle
-
-Register a Uniswap V3 pool as an oracle for an asset
-
-
-```solidity
-function updateUniswapOracle(address asset, address uniswapPool, uint32 twapPeriod, uint8 active)
-    public
-    nonZeroAddress(uniswapPool)
-    onlyListedAsset(asset)
-    onlyRole(MANAGER_ROLE)
-    whenNotPaused;
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|The asset to register the oracle for|
-|`uniswapPool`|`address`|The Uniswap V3 pool address (must contain the asset)|
-|`twapPeriod`|`uint32`|The TWAP period in seconds|
-|`active`|`uint8`|isActive flag|
+|`usdc_`|`address`|USDC address|
 
 
 ### updateChainlinkOracle
@@ -359,7 +230,7 @@ function updateChainlinkOracle(address asset, address oracle, uint8 active)
     external
     nonZeroAddress(oracle)
     onlyListedAsset(asset)
-    onlyRole(MANAGER_ROLE)
+    onlyRole(LendefiConstants.MANAGER_ROLE)
     whenNotPaused;
 ```
 **Parameters**
@@ -368,7 +239,7 @@ function updateChainlinkOracle(address asset, address oracle, uint8 active)
 |----|----|-----------|
 |`asset`|`address`|The asset to add the oracle for|
 |`oracle`|`address`|The oracle address|
-|`active`|`uint8`||
+|`active`|`uint8`|active or not (1 or 0)|
 
 
 ### updateMainOracleConfig
@@ -379,7 +250,7 @@ Updates the global oracle configuration parameters
 ```solidity
 function updateMainOracleConfig(uint80 freshness, uint80 volatility, uint40 volatilityPct, uint40 circuitBreakerPct)
     external
-    onlyRole(MANAGER_ROLE)
+    onlyRole(LendefiConstants.MANAGER_ROLE)
     whenNotPaused;
 ```
 **Parameters**
@@ -400,7 +271,7 @@ Updates rate configuration for a collateral tier
 ```solidity
 function updateTierConfig(CollateralTier tier, uint256 jumpRate, uint256 liquidationFee)
     external
-    onlyRole(MANAGER_ROLE)
+    onlyRole(LendefiConstants.MANAGER_ROLE)
     whenNotPaused;
 ```
 **Parameters**
@@ -440,32 +311,32 @@ function setCoreAddress(address newCore) external nonZeroAddress(newCore) onlyRo
 
 Pauses all contract operations
 
-*This function can only be called by addresses with PAUSER_ROLE*
+*This function can only be called by addresses with LendefiConstants.PAUSER_ROLE*
 
 **Notes:**
-- access: Restricted to PAUSER_ROLE
+- access: Restricted to LendefiConstants.PAUSER_ROLE
 
 - security: Critical function that stops all state-changing operations
 
 
 ```solidity
-function pause() external onlyRole(PAUSER_ROLE);
+function pause() external onlyRole(LendefiConstants.PAUSER_ROLE);
 ```
 
 ### unpause
 
 Unpauses all contract operations
 
-*This function can only be called by addresses with PAUSER_ROLE*
+*This function can only be called by addresses with LendefiConstants.PAUSER_ROLE*
 
 **Notes:**
-- access: Restricted to PAUSER_ROLE
+- access: Restricted to LendefiConstants.PAUSER_ROLE
 
 - security: Resumes normal contract operations
 
 
 ```solidity
-function unpause() external onlyRole(PAUSER_ROLE);
+function unpause() external onlyRole(LendefiConstants.PAUSER_ROLE);
 ```
 
 ### updateAssetConfig
@@ -477,7 +348,7 @@ Updates or adds a new asset configuration
 **Notes:**
 - security: Includes comprehensive parameter validation
 
-- access: Restricted to MANAGER_ROLE
+- access: Restricted to LendefiConstants.MANAGER_ROLE
 
 - pausable: Operation not allowed when contract is paused
 
@@ -490,7 +361,7 @@ Updates or adds a new asset configuration
 function updateAssetConfig(address asset, Asset calldata config)
     external
     nonZeroAddress(asset)
-    onlyRole(MANAGER_ROLE)
+    onlyRole(LendefiConstants.MANAGER_ROLE)
     whenNotPaused;
 ```
 **Parameters**
@@ -510,7 +381,7 @@ Updates the collateral tier for an existing asset
 **Notes:**
 - security: Only modifies tier assignment
 
-- access: Restricted to MANAGER_ROLE
+- access: Restricted to LendefiConstants.MANAGER_ROLE
 
 - pausable: Operation not allowed when contract is paused
 
@@ -523,7 +394,7 @@ Updates the collateral tier for an existing asset
 function updateAssetTier(address asset, CollateralTier newTier)
     external
     onlyListedAsset(asset)
-    onlyRole(MANAGER_ROLE)
+    onlyRole(LendefiConstants.MANAGER_ROLE)
     whenNotPaused;
 ```
 **Parameters**
@@ -534,83 +405,62 @@ function updateAssetTier(address asset, CollateralTier newTier)
 |`newTier`|`CollateralTier`|The new collateral tier to assign|
 
 
-### setPrimaryOracle
+### scheduleUpgrade
 
-Sets the primary oracle type for an asset
+Schedules an upgrade to a new implementation with timelock
 
-*Changes which oracle is used as the primary price source*
-
-**Notes:**
-- access: Restricted to MANAGER_ROLE
-
-- pausable: Operation not allowed when contract is paused
-
-- validation: Asset must be previously listed
-
-- emits: PrimaryOracleSet when primary oracle is changed
+*Only callable by addresses with LendefiConstants.UPGRADER_ROLE*
 
 
 ```solidity
-function setPrimaryOracle(address asset, OracleType oracleType)
+function scheduleUpgrade(address newImplementation)
+    external
+    nonZeroAddress(newImplementation)
+    onlyRole(LendefiConstants.UPGRADER_ROLE);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`newImplementation`|`address`|Address of the new implementation contract|
+
+
+### cancelUpgrade
+
+Cancels a previously scheduled upgrade
+
+*Only callable by addresses with LendefiConstants.UPGRADER_ROLE*
+
+
+```solidity
+function cancelUpgrade() external onlyRole(LendefiConstants.UPGRADER_ROLE);
+```
+
+### evaluateCircuitBreaker
+
+Automatically evaluates and manages circuit breaker status based on price conditions
+
+*Anyone can call this function to update circuit breaker status based on current conditions*
+
+
+```solidity
+function evaluateCircuitBreaker(address asset)
     external
     onlyListedAsset(asset)
-    onlyRole(MANAGER_ROLE)
-    whenNotPaused;
+    returns (bool triggered, uint256 deviation);
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`asset`|`address`|The asset to update|
-|`oracleType`|`OracleType`|The oracle type to set as primary|
+|`asset`|`address`|The asset to evaluate circuit breaker status for|
 
-
-### triggerCircuitBreaker
-
-Activates the circuit breaker for an asset
-
-*Prevents price queries when activated*
-
-**Notes:**
-- access: Restricted to CIRCUIT_BREAKER_ROLE
-
-- security: Emergency function to prevent using potentially manipulated prices
-
-- emits: CircuitBreakerTriggered when activated
-
-
-```solidity
-function triggerCircuitBreaker(address asset) external onlyRole(CIRCUIT_BREAKER_ROLE);
-```
-**Parameters**
+**Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`asset`|`address`|The asset to trigger circuit breaker for|
-
-
-### resetCircuitBreaker
-
-Deactivates the circuit breaker for an asset
-
-*Allows price queries to resume*
-
-**Notes:**
-- access: Restricted to CIRCUIT_BREAKER_ROLE
-
-- security: Should only be called after verifying price feed reliability
-
-- emits: CircuitBreakerReset when deactivated
-
-
-```solidity
-function resetCircuitBreaker(address asset) external onlyRole(CIRCUIT_BREAKER_ROLE);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|The asset to reset circuit breaker for|
+|`triggered`|`bool`|Whether the circuit breaker is now active|
+|`deviation`|`uint256`|The percentage deviation that affected the decision|
 
 
 ### getOracleByType
@@ -660,58 +510,6 @@ function getAssetPriceByType(address asset, OracleType oracleType)
 |----|----|-----------|
 |`<none>`|`uint256`|The price from the specified oracle type|
 
-
-### getAssetPrice
-
-Get asset price as a view function (no state changes)
-
-
-```solidity
-function getAssetPrice(address asset) public view onlyListedAsset(asset) returns (uint256);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`asset`|`address`|The asset to get price for|
-
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`<none>`|`uint256`|price The current price of the asset|
-
-
-### scheduleUpgrade
-
-Schedules an upgrade to a new implementation with timelock
-
-*Only callable by addresses with UPGRADER_ROLE*
-
-
-```solidity
-function scheduleUpgrade(address newImplementation)
-    external
-    nonZeroAddress(newImplementation)
-    onlyRole(UPGRADER_ROLE);
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`newImplementation`|`address`|Address of the new implementation contract|
-
-
-### cancelUpgrade
-
-Cancels a previously scheduled upgrade
-
-*Only callable by addresses with UPGRADER_ROLE*
-
-
-```solidity
-function cancelUpgrade() external onlyRole(UPGRADER_ROLE);
-```
 
 ### upgradeTimelockRemaining
 
@@ -1114,26 +912,85 @@ function getOracleCount(address asset) external view returns (uint256);
 |`<none>`|`uint256`|The total number of active oracle price feeds|
 
 
-### checkPriceDeviation
+### updateUniswapOracle
 
-Check for price deviation without modifying state
+Register a Uniswap V3 pool as an oracle for an asset
+
+**Notes:**
+- validation: Validates through _validateAssetConfig
+
+- validation: Performed by _validatePool function
 
 
 ```solidity
-function checkPriceDeviation(address asset) external view returns (bool, uint256);
+function updateUniswapOracle(address asset, address uniswapPool, uint32 twapPeriod, uint8 active)
+    public
+    nonZeroAddress(uniswapPool)
+    onlyListedAsset(asset)
+    onlyRole(LendefiConstants.MANAGER_ROLE)
+    whenNotPaused;
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`asset`|`address`|The asset to check|
+|`asset`|`address`|The asset to register the oracle for|
+|`uniswapPool`|`address`|The Uniswap V3 pool address|
+|`twapPeriod`|`uint32`|The TWAP period in seconds (15min-24h)|
+|`active`|`uint8`|isActive flag (0 or 1)|
+
+
+### getAssetPrice
+
+Get asset price as a view function (no state changes)
+
+
+```solidity
+function getAssetPrice(address asset) public view onlyListedAsset(asset) returns (uint256);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`asset`|`address`|The asset to get price for|
 
 **Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`bool`|Whether the asset has a large price deviation|
-|`<none>`|`uint256`||
+|`<none>`|`uint256`|price The current price of the asset|
+
+
+### checkPriceDeviation
+
+Checks for price deviation between Chainlink and Uniswap oracles
+
+*Requires both oracles to be active. Calculates percentage deviation between prices.*
+
+**Notes:**
+- reverts: NotEnoughValidOracles if both oracles aren't active
+
+- calculation: (abs(price1 - price2) * 100) / min(price1, price2)
+
+- example: If Chainlink reports $1000 and Uniswap reports $1200:
+deviation = (200 * 100) / 1000 = 20%
+
+
+```solidity
+function checkPriceDeviation(address asset) public view returns (bool isDeviated, uint256 deviation);
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`asset`|`address`|The address of the asset to check price deviation for|
+
+**Returns**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`isDeviated`|`bool`|True if deviation exceeds circuit breaker threshold|
+|`deviation`|`uint256`|The calculated percentage deviation between oracle prices (0-100+)|
 
 
 ### _initializeDefaultTierParameters
@@ -1156,48 +1013,40 @@ Initializes default parameters for all collateral tiers
 function _initializeDefaultTierParameters() internal;
 ```
 
-### _calculateMedianPrice
+### _authorizeUpgrade
 
-Calculate median price from oracles without modifying state
+Validates and authorizes contract upgrades
+
+*Internal function required by UUPSUpgradeable pattern*
+
+**Notes:**
+- security: Enforces timelock and validates implementation address
+
+- access: Restricted to LendefiConstants.UPGRADER_ROLE
+
+- validation: Requires:
+- Upgrade must be scheduled
+- Implementation must match scheduled upgrade
+- Timelock duration must have elapsed
+
+- emits: Upgrade event on successful authorization
+
+- state-changes: Increments version and clears pending upgrade
 
 
 ```solidity
-function _calculateMedianPrice(address asset) internal view returns (uint256 median, uint256 deviation);
+function _authorizeUpgrade(address newImplementation) internal override onlyRole(LendefiConstants.UPGRADER_ROLE);
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`asset`|`address`|The asset to get price for|
-
-**Returns**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`median`|`uint256`|The median price across all valid oracles|
-|`deviation`|`uint256`|Maximum deviation between any two prices (instead of vs stored price)|
-
-
-### _validateAssetConfig
-
-Validate asset configuration parameters
-
-*Centralized validation to ensure consistent checks across all configuration updates*
-
-
-```solidity
-function _validateAssetConfig(Asset calldata config) internal pure;
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`config`|`Asset`|The asset configuration to validate|
+|`newImplementation`|`address`|Address of the new implementation contract|
 
 
 ### _getChainlinkPrice
 
-Get price from Chainlink oracle
+Get price from Chainlink oracle with volatility checks
 
 
 ```solidity
@@ -1207,13 +1056,13 @@ function _getChainlinkPrice(address asset) internal view returns (uint256);
 
 |Name|Type|Description|
 |----|----|-----------|
-|`asset`|`address`|The Chainlink oracle address|
+|`asset`|`address`|The asset address|
 
 **Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`<none>`|`uint256`|The price with the specified decimals|
+|`<none>`|`uint256`|The price with normalized decimals (1e6)|
 
 
 ### _getUniswapTWAPPrice
@@ -1248,14 +1097,46 @@ function _getUniswapTWAPPrice(address asset) internal view returns (uint256 toke
 
 ### getAnyPoolTokenPriceInUSD
 
-Retrieves the price of a token in USD from any Uniswap V3 pool
+Retrieves the USD price of any token from a Uniswap V3 pool using TWAP
 
-*Supports both USDC-based pools and ETH-based pools with USDC as a reference*
+*Supports both direct USDC pairs and indirect ETH-denominated pairs*
 
 **Notes:**
-- oracle: Uses Uniswap V3 TWAP oracle
+- oracle-path: For direct USDC pairs:
+- Fetches token/USDC price directly from pool
+- Normalizes to 1e6 precision based on token decimals
 
-- reverts: OracleInvalidPrice if the price is invalid or zero
+- oracle-path: For ETH pairs:
+- Gets token/ETH price from pool
+- Gets ETH/USDC price from reference pool
+- Combines prices with proper decimal handling
+
+- decimals: Input token can have any decimal precision (1-18)
+- Output is always normalized to 1e6 (USDC precision)
+- Internal calculations handle decimal conversion
+
+- validation: Performs the following checks:
+- Token must be present in the specified pool
+- Resulting price must be greater than zero
+- Pool must be properly configured
+
+- security: Features:
+- Uses TWAP for manipulation resistance
+- Handles decimal normalization safely
+- Validates pool configuration
+
+- reverts: OracleInvalidPrice - If calculated price is zero or invalid
+
+- reverts: AssetNotInUniswapPool - If token not found in pool
+
+- example: For a token with 18 decimals in a token/USDC pool:
+- Raw pool price: 1200.123456 (token/USDC)
+- Returned price: 1200123456 (1200.123456 * 1e6)
+
+- example: For a token with 18 decimals in a token/ETH pool:
+- Raw pool price: 0.5 ETH per token
+- ETH/USDC price: 2000.00 USD per ETH
+- Returned price: 1000000000 (1000.00 * 1e6)
 
 
 ```solidity
@@ -1268,28 +1149,30 @@ function getAnyPoolTokenPriceInUSD(address poolAddress, address token, address e
 
 |Name|Type|Description|
 |----|----|-----------|
-|`poolAddress`|`address`|The address of the Uniswap V3 pool|
-|`token`|`address`|The address of the token to fetch the price for|
-|`ethUsdcPool`|`address`|The address of the ETH/USDC Uniswap V3 pool|
-|`twapPeriod`|`uint32`|The TWAP period in seconds|
+|`poolAddress`|`address`|Address of the Uniswap V3 pool to query|
+|`token`|`address`|Address of the token to get the price for|
+|`ethUsdcPool`|`address`|Address of the ETH/USDC pool used for ETH-denominated price conversion|
+|`twapPeriod`|`uint32`|Time period in seconds for the TWAP calculation (900-1800)|
 
 **Returns**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`tokenPriceInUSD`|`uint256`|The price of the token in USD (scaled to 1e6)|
+|`tokenPriceInUSD`|`uint256`|Price in USD normalized to 1e6 precision|
 
 
 ### getOptimalUniswapConfig
 
 Determines the optimal configuration for a Uniswap V3 pool
 
-*Identifies whether the asset is token0, its decimals, and if the pool is USDC-based*
+*Identifies token positions, decimals, and pool type for accurate price calculations*
 
 **Notes:**
-- validation: Ensures the asset is part of the pool
+- validation: Ensures the asset is part of the pool, reverts otherwise
 
-- reverts: "Asset not in pool" if the asset is not in the pool
+- pricing-impact: Token position affects price calculation direction (token0/token1 vs token1/token0)
+
+- reverts: AssetNotInUniswapPool if the asset is not present in the pool
 
 
 ```solidity
@@ -1309,18 +1192,37 @@ function getOptimalUniswapConfig(address asset, IUniswapV3Pool pool)
 
 |Name|Type|Description|
 |----|----|-----------|
-|`isToken0`|`bool`|True if the asset is token0 in the pool|
-|`assetDecimals`|`uint8`|The number of decimals for the asset|
-|`isUsdcPool`|`bool`|True if the pool is USDC-based|
+|`isToken0`|`bool`|True if the asset is token0 in the pool, false if token1|
+|`assetDecimals`|`uint8`|The number of decimal places for the asset (e.g., 18 for ETH)|
+|`isUsdcPool`|`bool`|True if the pool directly pairs with USDC, false otherwise|
 
 
 ### _validatePool
 
-Validates that both asset and quote token are present in a Uniswap V3 pool
+Validates a Uniswap V3 pool configuration for an asset
+
+*Performs comprehensive validation to ensure safe and reliable oracle configuration*
+
+**Notes:**
+- validation: Performs the following checks:
+- Asset must be present in the Uniswap pool (token0 or token1)
+- TWAP period must be between 15 minutes and 24 hours for optimal security
+- Active parameter must be valid (0=inactive or 1=active)
+- If deactivating, ensures minimum oracle requirements are still met
+
+- security: Prevents configuration of invalid pools or unsafe TWAP periods
+
+- reverts: AssetNotInUniswapPool if asset is not in the pool
+
+- reverts: InvalidThreshold if TWAP period is outside allowed range
+
+- reverts: InvalidParameter if active parameter is not 0 or 1
+
+- reverts: NotEnoughValidOracles if deactivation would violate minimum oracle requirement
 
 
 ```solidity
-function _validatePool(address asset, address uniswapPool) internal view;
+function _validatePool(address asset, address uniswapPool, uint32 twapPeriod, uint8 active) internal view;
 ```
 **Parameters**
 
@@ -1328,36 +1230,78 @@ function _validatePool(address asset, address uniswapPool) internal view;
 |----|----|-----------|
 |`asset`|`address`|The asset token address to validate|
 |`uniswapPool`|`address`|The Uniswap V3 pool address|
+|`twapPeriod`|`uint32`|The TWAP period in seconds (must be 15min-24h)|
+|`active`|`uint8`|Whether the oracle should be active (must be 0 or 1)|
 
 
-### _authorizeUpgrade
+### _getChainlinkVolatility
 
-Validates and authorizes contract upgrades
+Calculates price volatility between current and previous Chainlink oracle rounds
 
-*Internal function required by UUPSUpgradeable pattern*
+*Compares the current price with the previous round price to detect significant changes*
 
 **Notes:**
-- security: Enforces timelock and validates implementation address
+- returns: 0 if previous round data is invalid or unavailable
 
-- access: Restricted to UPGRADER_ROLE
+- calculation: (abs(currentPrice - previousPrice) * 100) / previousPrice
 
-- validation: Requires:
-- Upgrade must be scheduled
-- Implementation must match scheduled upgrade
-- Timelock duration must have elapsed
+- security: Used to detect abnormal price movements in Chainlink feeds
 
-- emits: Upgrade event on successful authorization
-
-- state-changes: Increments version and clears pending upgrade
+- example: If current price is $1200 and previous was $1000:
+volatilityPct = (|1200 - 1000| * 100) / 1000 = 20%
 
 
 ```solidity
-function _authorizeUpgrade(address newImplementation) internal override onlyRole(UPGRADER_ROLE);
+function _getChainlinkVolatility(address asset) internal view returns (uint256);
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`newImplementation`|`address`|Address of the new implementation contract|
+|`asset`|`address`|The asset address to check volatility for|
+
+**Returns**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`<none>`|`uint256`|volatilityPct The percentage change between current and previous price (0-100+)|
+
+
+### _validateAssetConfig
+
+Validates asset configuration parameters
+
+*Centralized validation logic for all asset configurations*
+
+**Notes:**
+- validation: Performs comprehensive checks including:
+- Oracle address validity (non-zero)
+- Oracle activity flags validity (0 or 1)
+- Minimum oracle requirement satisfaction
+- Primary oracle type activation
+- Threshold values (liquidation threshold ≤ 990)
+- Threshold ordering (borrow threshold ≤ liquidation threshold - 10)
+- Decimal precision (1-18)
+- Activity flag validity (0 or 1)
+- Supply limit validity (non-zero)
+- Isolation debt cap for isolated assets (non-zero)
+
+- security: Guards against misconfiguration that could lead to:
+- Unreliable price data
+- Unsafe collateralization ratios
+- Economic attacks on the lending protocol
+
+- reverts: Multiple error types based on the specific validation failure
+
+
+```solidity
+function _validateAssetConfig(address asset, Asset memory config) internal pure;
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`asset`|`address`|The address of the asset being configured|
+|`config`|`Asset`|The complete asset configuration to validate|
 
 

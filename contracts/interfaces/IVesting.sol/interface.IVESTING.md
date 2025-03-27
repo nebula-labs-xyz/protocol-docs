@@ -1,5 +1,5 @@
 # IVESTING
-[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/aaed57cb7ee1c677c0c943d32a39d9411c489fc9/contracts/interfaces/IVesting.sol)
+[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/d0b15d8d57415f38e3db367bb9e72ba910580c33/contracts/interfaces/IVesting.sol)
 
 **Note:**
 security-contact: security@nebula-labs.xyz
@@ -122,17 +122,13 @@ event ERC20Released(address indexed token, uint256 amount);
 |`amount`|`uint256`|released|
 
 ## Errors
-### CustomError
-*Custom Error.*
+### ZeroAddress
+Error thrown when a zero address is provided where a valid address is required
+
+*Used in validation of constructor parameters*
 
 
 ```solidity
-error CustomError(string msg);
+error ZeroAddress();
 ```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`msg`|`string`|error desription|
 

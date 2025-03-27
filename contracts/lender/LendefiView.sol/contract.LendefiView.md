@@ -1,8 +1,8 @@
 # LendefiView
-[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/7882024792b94909a5d6c51ec494855406aaf294/contracts/lender/LendefiView.sol)
+[Git Source](https://github.com/nebula-labs-xyz/lendefi-protocol/blob/d0b15d8d57415f38e3db367bb9e72ba910580c33/contracts/lender/LendefiView.sol)
 
 **Inherits:**
-[ILendefiView](/contracts/interfaces/ILendefiView.sol/interface.ILendefiView.md)
+[ILENDEFIVIEW](/contracts/interfaces/ILendefiView.sol/interface.ILENDEFIVIEW.md)
 
 **Author:**
 Lendefi Protocol Team
@@ -28,7 +28,7 @@ Main protocol contract reference
 
 
 ```solidity
-IPROTOCOL public protocol;
+IPROTOCOL internal protocol;
 ```
 
 
@@ -37,7 +37,7 @@ USDC token contract reference
 
 
 ```solidity
-IERC20 public usdcInstance;
+IERC20 internal usdcInstance;
 ```
 
 
@@ -46,7 +46,7 @@ Yield token (LP token) contract reference
 
 
 ```solidity
-ILendefiYieldToken public yieldTokenInstance;
+IYIELDTOKEN internal yieldTokenInstance;
 ```
 
 
@@ -55,7 +55,7 @@ Ecosystem contract reference for rewards calculation
 
 
 ```solidity
-IECOSYSTEM public ecosystemInstance;
+IECOSYSTEM internal ecosystemInstance;
 ```
 
 
@@ -88,16 +88,7 @@ Provides a comprehensive summary of a user's position
 
 
 ```solidity
-function getPositionSummary(address user, uint256 positionId)
-    external
-    view
-    returns (
-        uint256 totalCollateralValue,
-        uint256 currentDebt,
-        uint256 availableCredit,
-        bool isIsolated,
-        IPROTOCOL.PositionStatus status
-    );
+function getPositionSummary(address user, uint256 positionId) external view returns (PositionSummary memory);
 ```
 **Parameters**
 
@@ -110,11 +101,7 @@ function getPositionSummary(address user, uint256 positionId)
 
 |Name|Type|Description|
 |----|----|-----------|
-|`totalCollateralValue`|`uint256`|The total USD value of all collateral in the position|
-|`currentDebt`|`uint256`|The current debt amount including accrued interest|
-|`availableCredit`|`uint256`|The remaining credit available to borrow|
-|`isIsolated`|`bool`|Whether the position is in isolation mode|
-|`status`|`IPROTOCOL.PositionStatus`|The current status of the position (Active, Liquidated, etc.)|
+|`<none>`|`PositionSummary`|Summary struct containing all position data|
 
 
 ### getLPInfo
