@@ -60,7 +60,7 @@
     - [FlashLoanRecipient](contracts/liquidator/Liquidator.sol/contract.FlashLoanRecipient.md)
 # overview
   - [❱ overview](overview/README.md)
-    - [❱ ecosystem](overview/README.md)
+    - [❱ ecosystem](overview/ecosystem/README.md)
       - [Ecosystem](overview/ecosystem/Ecosystem.md)
       - [GovernanceToken](overview/ecosystem/GovernanceToken.md)
       - [InvestmentManager](overview/ecosystem/InvestmentManager.md)
