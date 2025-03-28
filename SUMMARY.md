@@ -74,7 +74,9 @@
       - [Deploy](overview/ecosystem/DeployScript.md)
     - [❱ protocol](overview/protocol/README.md)
       - [Functions](overview/protocol/functions/Functions.md)
+      - [LendefiAssets](overview/protocol/LendefiAssets/LendefiAssets.md)
       - [Liquidation](overview/protocol/liquidation/Liquidation.md)
       - [Position Lifecycle](overview/protocol/positionLifecycle/PositionLifecycle.md)
+
 
 
