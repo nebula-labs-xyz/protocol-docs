@@ -72,7 +72,7 @@
       - [TeamVesting](overview/ecosystem/TeamVesting.md)
       - [Treasury](overview/ecosystem/Treasury.md)
     - [❱ protocol](overview/protocol/README.md)
-      - [Functions](overview/protocol/functions/Functions.md)
+      - [Core Functions](overview/protocol/functions/Functions.md)
       - [LendefiAssets](overview/protocol/LendefiAssets/LendefiAssets.md)
       - [Liquidation](overview/protocol/liquidation/Liquidation.md)
       - [Position Lifecycle](overview/protocol/positionLifecycle/PositionLifecycle.md)
