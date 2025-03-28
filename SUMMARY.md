@@ -50,6 +50,7 @@
       - [IYODAMATH](contracts/interfaces/IYodaMath.sol/interface.IYODAMATH.md)
     - [❱ lender](contracts/lender/README.md)
       - [❱ lib](contracts/lender/lib/README.md)
+        - [LendefiConstants](contracts/lender/lib/LendefiConstants.sol/library.LendefiConstants.md)
         - [LendefiRates](contracts/lender/lib/LendefiRates.sol/library.LendefiRates.md)
         - [UniswapTickMath](contracts/lender/lib/UniswapTickMath.sol/library.UniswapTickMath.md)
         - [YodaMath](contracts/lender/lib/YodaMath.sol/contract.YodaMath.md)
