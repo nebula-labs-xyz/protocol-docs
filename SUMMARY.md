@@ -71,7 +71,6 @@
       - [TeamManager](overview/ecosystem/TeamManager.md)
       - [TeamVesting](overview/ecosystem/TeamVesting.md)
       - [Treasury](overview/ecosystem/Treasury.md)
-      - [Deploy](overview/ecosystem/DeployScript.md)
     - [❱ protocol](overview/protocol/README.md)
       - [Functions](overview/protocol/functions/Functions.md)
       - [LendefiAssets](overview/protocol/LendefiAssets/LendefiAssets.md)
